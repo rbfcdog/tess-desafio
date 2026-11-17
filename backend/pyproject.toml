@@ -1,0 +1,20 @@
+[project]
+name = "tess-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=46,<48",
+    "fastapi",
+    "httpcore2>=2.16,<3",
+    "httpx2>=2.16,<3",
+    "jsonschema>=4.25,<5",
+    "mcp>=2.3,<3",
+    "openai>=3.35.1,<4",
+    "pillow>=11,<13",
+    "pypdf>=6.21.2,<7",
+    "python-multipart>=0.0.20,<1",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = []
