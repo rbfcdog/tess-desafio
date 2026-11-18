@@ -53,12 +53,16 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.finishes = []
         self.fail_reserve = False
         self.fail_finish = False
+        self.renames = []
+        self.conversation_rows = [{"title": "Nova conversa"}]
 
         async def rpc(name, **parameters):
             if name == "begin_run":
                 return {"run_id": "run", "user_message_id": "user-message", "assistant_message_id": "assistant-message"}
             if name == "begin_regenerate_run":
                 return {"run_id": "run", "user_message_id": "user-1", "assistant_message_id": "assistant-message"}
+            if name == "rename_conversation":
+                self.renames.append(parameters["p_title"])
             if name == "reserve_model_step":
                 if self.fail_reserve:
                     raise HTTPException(429, "budget exhausted")
@@ -75,10 +79,15 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
                     raise HTTPException(503, "persistence failed")
             return {"ok": True}
 
+        def rows_side_effect(table, **parameters):
+            if table == "conversations":
+                return self.conversation_rows
+            return self.history.get("summaries", [])
+
         self.db = SimpleNamespace(
             config=SimpleNamespace(model="gpt-4.1-mini", max_output_tokens=2048),
             history=AsyncMock(side_effect=lambda *_args: self.history),
-            rows=AsyncMock(side_effect=lambda *_args, **_kwargs: self.history.get("summaries", [])),
+            rows=AsyncMock(side_effect=rows_side_effect),
             settings=AsyncMock(return_value={"system_prompt": ""}),
             rpc=AsyncMock(side_effect=rpc), audit=AsyncMock(),
         )
@@ -117,6 +126,54 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         prompt = self.provider.responses.create.await_args.kwargs["input"]
         self.assertIn("Pergunta original", str(prompt))
         self.assertEqual(str(prompt).count("Pergunta original"), 1)
+
+    async def test_first_message_is_named_by_the_model(self):
+        self.history = {"messages": [
+            {"id": "user-message", "role": "user", "content": "Olá", "status": "completed", "created_at": "t1"},
+            {"id": "assistant-message", "role": "assistant", "content": "", "status": "running", "created_at": "t1"},
+        ], "runs": [], "summaries": []}
+        async def create(**kwargs):
+            if kwargs.get("stream"):
+                return Stream(terminal())
+            return response([message("Fotossintese explicada")], usage=(30, 6))
+        self.provider.responses.create.side_effect = create
+        events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(self.renames, ["Fotossintese explicada"])
+        title_step = next(step for step in self.reservations if step["p_max_output_tokens"] == 32)
+        self.assertEqual(title_step["p_kind"], "reply")
+        completed = [record for record in self.records if record["p_input_tokens"] == 30]
+        self.assertEqual(completed[0]["p_output_tokens"], 6)
+
+    async def test_renamed_conversation_is_never_overwritten(self):
+        self.history = {"messages": [
+            {"id": "user-message", "role": "user", "content": "Olá", "status": "completed", "created_at": "t1"},
+            {"id": "assistant-message", "role": "assistant", "content": "", "status": "running", "created_at": "t1"},
+        ], "runs": [], "summaries": []}
+        self.conversation_rows = [{"title": "Meu nome escolhido"}]
+        events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(self.renames, [])
+        self.assertEqual(len(self.reservations), 1)
+
+    async def test_failed_naming_never_blocks_the_chat(self):
+        self.history = {"messages": [
+            {"id": "user-message", "role": "user", "content": "Olá", "status": "completed", "created_at": "t1"},
+            {"id": "assistant-message", "role": "assistant", "content": "", "status": "running", "created_at": "t1"},
+        ], "runs": [], "summaries": []}
+        calls = []
+        async def create(**kwargs):
+            calls.append(kwargs)
+            if not kwargs.get("stream"):
+                raise ConnectionError("naming upstream failed")
+            return Stream(terminal())
+        self.provider.responses.create.side_effect = create
+        events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(self.renames, [])
+        self.assertEqual(self.records[0]["p_status"], "failed")
+        self.assertEqual(self.finishes[-1]["p_input_tokens"], 11)
+        self.assertEqual(self.finishes[-1]["p_output_tokens"], 7)
 
     async def test_partial_failure_is_never_completed_and_unknown_usage_remains_reserved(self):
         self.provider.responses.create.return_value = Stream(

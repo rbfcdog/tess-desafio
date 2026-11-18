@@ -170,35 +170,20 @@ begin
   select * into account from public.usage_accounts where id='global';
   if account.used_tokens <> 101 or account.reserved_tokens <> 0 then raise exception 'Reported usage was not settled'; end if;
 
-  -- The first prompt names an unnamed conversation; renamed ones stay untouched.
+  -- Naming happens in the engine with the model; begin_run keeps the stored title.
   update public.usage_accounts set limit_tokens=1000,used_tokens=0,reserved_tokens=0 where id='global';
   c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
-  perform public.begin_run(u2,c,gen_random_uuid(),'Minha primeira pergunta'||chr(10)||'segunda linha','model',1);
-  if (select title from public.conversations where id=c) <> 'Minha primeira pergunta' then
-    raise exception 'Conversation was not named from the prompt';
-  end if;
-  c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
-  perform public.begin_run(u2,c,gen_random_uuid(),'Uma linha bem longa que passa de sessenta caracteres e ainda continua mais um pouco','model',1);
-  if (select title from public.conversations where id=c) <> 'Uma linha bem longa que passa de sessenta caracteres e' then
-    raise exception 'Long prompt title was not truncated at a word boundary';
-  end if;
-  c := (public.create_conversation(u2,'Meu nome escolhido')->>'id')::uuid;
-  perform public.begin_run(u2,c,gen_random_uuid(),'Outra pergunta','model',1);
-  if (select title from public.conversations where id=c) <> 'Meu nome escolhido' then
-    raise exception 'Renamed conversation was overwritten';
-  end if;
-  c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
-  insert into public.attachments(user_id,conversation_id,filename,media_type,size_bytes,page_count)
-    values (u2,c,'relatorio.pdf','application/pdf',2048,1) returning id into s;
-  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'','model',1,ARRAY[s]))->>'run_id';
+  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'Minha primeira pergunta'||chr(10)||'segunda linha','model',1))->>'run_id';
   if (select title from public.conversations where id=c) <> 'Nova conversa' then
-    raise exception 'Attachment-only run invented a title';
+    raise exception 'begin_run invented a conversation title';
   end if;
-  perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
-  update public.runs set created_at=now()-interval '5 minutes' where user_id=u2;
-  for v_run_id in select id from public.runs where user_id=u2 and status='running' loop
-    perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
-  end loop;
+  perform public.finish_run(u2,v_run_id::uuid,'failed','',0,0,'no_provider_call');
+  c := (public.create_conversation(u2,'Meu nome escolhido')->>'id')::uuid;
+  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'Outra pergunta','model',1))->>'run_id';
+  if (select title from public.conversations where id=c) <> 'Meu nome escolhido' then
+    raise exception 'begin_run overwrote a manual title';
+  end if;
+  perform public.finish_run(u2,v_run_id::uuid,'failed','',0,0,'no_provider_call');
 
   -- Deleting a conversation must not leak reservations nor keep shared links alive.
   c := (public.create_conversation(u2,'Para excluir')->>'id')::uuid;

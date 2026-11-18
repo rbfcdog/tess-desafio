@@ -346,6 +346,37 @@ async def chat_response(
                 scope="eq.history", order="created_at.asc,id.asc",
             ))
             settings = await run.wait(db.settings(user_id))
+            conversation_rows = await run.wait(db.rows(
+                "conversations", select="title", user_id=f"eq.{user_id}", id=f"eq.{conversation_id}",
+            ))
+            # The first exchange names an unnamed conversation; the model writes the title.
+            if (conversation_rows and conversation_rows[0].get("title") == "Nova conversa"
+                    and any(message["role"] == "user" for message in history["messages"])
+                    and not any(message["role"] == "assistant" and message["status"] == "completed"
+                                for message in history["messages"])
+                    and prompt_content):
+                try:
+                    title_prompt = ("Escolha um titulo curto em portugues que resume esta abertura de conversa. "
+                                    "Responda somente com o titulo, sem aspas, com no maximo 40 caracteres.\n\n"
+                                    f"Mensagem: {prompt_content[:600]}")
+                    title_count = await run.count([{"role": "user", "content": title_prompt}], [])
+                    await run.reserve("reply", title_count, 32)
+                    title_response = await run.wait(provider.responses.create(
+                        model=db.config.model, input=[{"role": "user", "content": title_prompt}],
+                        tools=[], max_output_tokens=32, store=False, stream=False, truncation="disabled",
+                    ))
+                    run.observe_usage(title_response)
+                    candidate = response_text(title_response).strip().strip('"').strip()[:60]
+                    await run.record("completed")
+                    if candidate:
+                        await run.wait(db.rpc("rename_conversation", p_user_id=user_id,
+                                              p_conversation_id=conversation_id, p_title=candidate))
+                except Exception:
+                    # A failed naming attempt never blocks the chat; the step is settled conservatively.
+                    try:
+                        await run.record("failed", cleanup=True)
+                    except Exception:
+                        pass
             context = Context({**history, "summaries": summaries}, settings["system_prompt"], prompt_content, prompt_attachments)
             registry = await run.wait(ToolRegistry.load(db, user_id, conversation_id, run.run_id))
             current = await run.wait(context.current_item(db, user_id, conversation_id))
