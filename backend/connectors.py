@@ -247,8 +247,11 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
         raw, _ = await get("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + arguments["message_id"], {"format": "full"})
         message = json.loads(raw)
         bodies = []
+        total = 0
+        BODY_BUDGET = 24000  # chars across all parts; keeps the JSON result under MAX_TOOL_RESULT_BYTES
         async def body(part, depth=0):
-            if depth > 15 or len(bodies) >= 30 or part.get("filename"):
+            nonlocal total
+            if depth > 15 or total >= BODY_BUDGET or part.get("filename"):
                 return
             if part.get("mimeType") in {"text/plain", "text/html"}:
                 data = part.get("body", {})
@@ -268,7 +271,10 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
                         text = decoded.decode(content_type.get_content_charset() or "utf-8", "replace")
                     except (LookupError, UnicodeError):
                         text = decoded.decode("utf-8", "replace")
-                    bodies.append({"media_type": part["mimeType"], "text": text[:24000]})
+                    chunk = text[: min(24000, BODY_BUDGET - total)]
+                    total += len(chunk)
+                    bodies.append({"media_type": part["mimeType"], "text": chunk,
+                                   **({"truncated": True} if len(chunk) < len(text) else {})})
             for child in part.get("parts", [])[:30]:
                 await body(child, depth + 1)
         await body(message.get("payload", {}))
@@ -290,6 +296,9 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
         else:
             raw, content_type = await get(url, {"alt": "media"})
         if content_type.startswith("text/") or mime in {"application/json", "application/xml"}:
-            return {"file": metadata, "text": raw.decode("utf-8", "replace")}
-        return {"file": metadata, "media_type": content_type, "data_base64": base64.b64encode(raw).decode()}
+            text = raw.decode("utf-8", "replace")
+            return {"file": metadata, "text": text[:24000], **({"truncated": True} if len(text) > 24000 else {})}
+        encoded = base64.b64encode(raw[:24576]).decode()  # ~32 KiB of base64, under MAX_TOOL_RESULT_BYTES
+        return {"file": metadata, "media_type": content_type, "data_base64": encoded,
+                **({"truncated": True} if len(raw) > 24576 else {})}
     raise ValueError("Unknown Google tool")
