@@ -148,7 +148,7 @@ Se o npm apresentar `EALLOWSCRIPTS` por configuração externa, use `npm --userc
 - **Google:** habilite Drive API e Gmail API no projeto Google, configure a tela de consentimento/usuários de teste e autorize o redirect exato. A interface oferece pesquisa e leitura, não envio de e-mail ou escrita em arquivos. OAuth usa PKCE, state de uso único associado ao navegador e credenciais criptografadas; desconectar impede reutilização dos tokens salvos. A leitura Gmail busca corpos MIME externos quando o [MessagePartBody](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages.attachments#MessagePartBody) contém `attachmentId`, respeita o charset declarado e não mistura arquivos anexados com o corpo do e-mail.
 - **Contexto:** conta as entradas multimodais reais antes da geração. Ao atingir o limiar, resume turnos completos, persiste o resumo e continua no mesmo envio sem apagar mensagens. Também preserva pares de chamada/resultado de ferramentas. Se o próprio envio atual exceder a janela real, retorna erro antes de gerar, sem remover silenciosamente seus arquivos.
 - **Execuções:** NDJSON com texto, andamento, ferramentas e compactação; falhas/cancelamentos preservam texto parcial. Há limites de chamadas e duração, idempotência por `request_id`, uma execução ativa por conversa e até dez novas execuções por usuário/minuto.
-- **Conversas:** a listagem usa um único snapshot do banco, em ordem de atualização, sem páginas por offset que possam duplicar ou omitir conversas durante renomeações concorrentes. A primeira mensagem nomeia a conversa automaticamente, respeitando um nome escolhido manualmente; a exclusão é explícita, em dois cliques, remove mensagens, execuções, anexos e links de compartilhamento e libera reservas de execuções em andamento.
+- **Conversas:** a listagem usa um único snapshot do banco, em ordem de atualização, sem páginas por offset que possam duplicar ou omitir conversas durante renomeações concorrentes. A primeira mensagem gera um **título por IA** (chamada curta reservada e contabilizada); nome escolhido manualmente nunca é sobrescrito e falha na nomeação não interrompe o chat. A exclusão é explícita, em dois cliques, remove mensagens, execuções, anexos e links de compartilhamento e libera reservas de execuções em andamento.
 
 ## Usabilidade adicional
 
@@ -213,7 +213,7 @@ O smoke de confirmação perdida executou o fluxo real do backend e a persistên
 ## Roteiro de demonstração
 
 1. **Login e cadastro**: entre com uma conta própria (ou crie) — a primeira conversa surge automaticamente.
-2. **Chat real**: envie uma pergunta; a conversa é nomeada pela mensagem e a resposta chega em streaming com Markdown formatado. Use **Regenerar** na última resposta para repetir com nova geração.
+2. **Chat real**: envie uma pergunta; a conversa recebe um **título gerado pela IA** e a resposta chega em streaming com Markdown formatado. Use **Regenerar** na última resposta para repetir com nova geração.
 3. **Visão e documentos**: anexe uma imagem ou PDF e pergunte sobre o conteúdo (ex.: "resuma este documento em 3 frases").
 4. **Ferramentas**: "Pesquise na web X e cite a fonte" (busca nativa); "Use a ferramenta Exa/Microsoft Learn/Context7..." (MCP habilitado em Ferramentas).
 5. **Compactação**: cole um texto bem longo (acima de ~16 mil tokens) e observe o evento "Resumindo contexto anterior" preservando o histórico original.
