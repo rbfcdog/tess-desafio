@@ -13,13 +13,11 @@ Chat com frontend Next.js/TypeScript e backend Python/FastAPI independentes. Sem
 | Compactação automática | Resumos persistidos, histórico original preservado, consumo contabilizado | Geração real em produção: 4 turnos acumulados, evento de compactação aos 16.675 tokens, resumo persistido e histórico intacto |
 | Cap global e auditoria | Reservas transacionais por chamada, consumo e eventos persistidos | Testes de comportamento e PostgreSQL real |
 | MCP | Servidores remotos autorizados, descoberta e seleção explícita de ferramentas | Descoberta e execução reais no Context7, Microsoft Learn e Exa (incluindo fetch de PDF por URL) |
-| Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Configurado em produção; consent screen alcançada com cliente real; autorização de conta aguardando o responsável |
+| Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Verificado em produção com conta real: busca listou arquivos reais do Drive e o Gmail resumiu e-mails verdadeiros; tokens criptografados no banco |
 | Produção | Dockerfiles não-root, healthchecks e configuração Railway | Aplicação pública em https://frontend-production-126c9ad0.up.railway.app com chat, visão, ferramentas, compactação, contabilidade e compartilhamento verificados no endereço público |
-| Vídeo | `artifacts/demo.mp4`, 1min45s, 1280×860 | Gravação dos fluxos reais em produção: login, resposta em streaming com Markdown, título por IA, visão de gráfico com leitura correta dos valores, busca na web com fonte citada e tema escuro |
+| Vídeo | `artifacts/demo.mp4`, 2min49s, 1280×860 | Gravação contínua em produção na conta real: login, busca na web com fonte citada e título por IA, Regenerar, visão de gráfico + PDF em uma mensagem, MCP (Context7), busca no Google Drive e leitura de Gmail reais, criação de link público e tema escuro |
 
-**Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios. O diferencial Google está configurado no servidor e aguarda a autorização de uma conta real para o fluxo completo; contas de teste usadas nas verificações foram removidas.
-
-O vídeo demonstra autenticação, cadastro de ferramenta, imagens/PDFs persistentes, compartilhamento sem login, revogação e layout móvel. Os registros técnicos de ferramentas foram produzidos por chamadas reais sem geração de LLM; as execuções correspondentes aparecem corretamente como sem resposta do modelo. O vídeo não comprova vision, resumo ou conversa gerados pela OpenAI, nem deploy público.
+**Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios e diferenciais — incluindo Google Drive/Gmail autorizados com uma conta real. O cadastro é imediato (sem confirmação por e-mail) e o vídeo em `artifacts/demo.mp4` registra os fluxos ponta a ponta em produção.
 
 ## Estrutura
 
