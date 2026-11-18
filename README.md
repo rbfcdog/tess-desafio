@@ -15,7 +15,7 @@ Chat com frontend Next.js/TypeScript e backend Python/FastAPI independentes. Sem
 | MCP | Servidores remotos autorizados, descoberta e seleção explícita de ferramentas | Descoberta e execução reais no Context7, Microsoft Learn e Exa (incluindo fetch de PDF por URL) |
 | Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Configurado em produção; consent screen alcançada com cliente real; autorização de conta aguardando o responsável |
 | Produção | Dockerfiles não-root, healthchecks e configuração Railway | Aplicação pública em https://frontend-production-126c9ad0.up.railway.app com chat, visão, ferramentas, compactação, contabilidade e compartilhamento verificados no endereço público |
-| Vídeo | `artifacts/demo.mp4` | Gravação anterior mostra os fluxos sem geração de IA; a gravação final será atualizada com as respostas reais antes da entrega |
+| Vídeo | `artifacts/demo.mp4`, 1min45s, 1280×860 | Gravação dos fluxos reais em produção: login, resposta em streaming com Markdown, título por IA, visão de gráfico com leitura correta dos valores, busca na web com fonte citada e tema escuro |
 
 **Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios. O diferencial Google está configurado no servidor e aguarda a autorização de uma conta real para o fluxo completo; contas de teste usadas nas verificações foram removidas.
 
