@@ -212,7 +212,7 @@ O smoke de confirmação perdida executou o fluxo real do backend e a persistên
 
 ## Roteiro de demonstração
 
-1. **Login e cadastro**: entre com uma conta própria (ou crie) — a primeira conversa surge automaticamente.
+1. **Login e cadastro**: entre com uma conta própria (ou crie) — o cadastro é imediato, sem confirmação por e-mail, e a primeira conversa surge automaticamente.
 2. **Chat real**: envie uma pergunta; a conversa recebe um **título gerado pela IA** e a resposta chega em streaming com Markdown formatado. Use **Regenerar** na última resposta para repetir com nova geração.
 3. **Visão e documentos**: anexe uma imagem ou PDF e pergunte sobre o conteúdo (ex.: "resuma este documento em 3 frases").
 4. **Ferramentas**: "Pesquise na web X e cite a fonte" (busca nativa); "Use a ferramenta Exa/Microsoft Learn/Context7..." (MCP habilitado em Ferramentas).
