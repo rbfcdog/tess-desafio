@@ -447,7 +447,7 @@ async def chat_response(
                             raise
                         except Exception:
                             # A falha da ferramenta não derruba o turno: o modelo recebe o erro e pode responder sem ela.
-                            result = {"error": "Não foi possível concluir a ferramenta."}
+                            result = {"error": f"A ferramenta {name} falhou agora e pode funcionar se tentada novamente."}
                             encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
                             run.tool_bytes += len(encoded.encode("utf-8"))
                             tool_failed = True

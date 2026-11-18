@@ -231,7 +231,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         second = self.provider.responses.create.await_args_list[1].kwargs
         replay = [item for item in second["input"] if item.get("type") == "function_call_output"]
         self.assertEqual(replay[0]["call_id"], "call-1")
-        self.assertIn("Não foi possível concluir", replay[0]["output"])
+        self.assertIn("falhou agora", replay[0]["output"])
         self.assertEqual([record["p_status"] for record in self.records], ["completed", "completed"])
 
     async def test_budget_denial_never_calls_model_or_tools(self):
