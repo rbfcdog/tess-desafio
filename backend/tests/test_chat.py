@@ -217,6 +217,23 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         names = [call.args[0] for call in self.db.rpc.await_args_list]
         self.assertLess(names.index("reserve_model_step"), names.index("record_model_step"))
 
+    async def test_tool_failure_feeds_the_error_and_the_turn_survives(self):
+        self.registry.definitions = [{"type": "function", "name": "lookup", "parameters": {"type": "object"}}]
+        self.registry.execute.side_effect = [RuntimeError("boom upstream"), {"facts": "second try"}]
+        calls = [{"type": "function_call", "id": "fn-1", "call_id": "call-1", "name": "lookup", "arguments": '{"x":1}'},
+                 {"type": "function_call", "id": "fn-2", "call_id": "call-2", "name": "lookup", "arguments": '{"x":2}'}]
+        self.provider.responses.create.side_effect = [Stream(terminal(response(calls))), Stream(terminal())]
+        events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        failed = [event for event in events if event["type"] == "tool"]
+        self.assertEqual([event["status"] for event in failed], ["running", "failed", "running", "completed"])
+        self.assertEqual(failed[1]["error"], "Não foi possível concluir a ferramenta.")
+        second = self.provider.responses.create.await_args_list[1].kwargs
+        replay = [item for item in second["input"] if item.get("type") == "function_call_output"]
+        self.assertEqual(replay[0]["call_id"], "call-1")
+        self.assertIn("Não foi possível concluir", replay[0]["output"])
+        self.assertEqual([record["p_status"] for record in self.records], ["completed", "completed"])
+
     async def test_budget_denial_never_calls_model_or_tools(self):
         self.fail_reserve = True
         events = await self.events()

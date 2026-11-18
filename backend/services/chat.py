@@ -435,20 +435,24 @@ async def chat_response(
                         name, arguments = call["name"], call["arguments"]
                         yield line({"type": "status", "stage": "tool", "text": f"Consultando ferramenta {name}."})
                         yield line({"type": "tool", "id": call_id, "name": name, "status": "running"})
+                        tool_failed = False
                         try:
                             result = await run.wait(registry.execute(name, arguments))
                             encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
                             size = len(encoded.encode("utf-8"))
                             if size > MAX_TOOL_RESULT_BYTES or run.tool_bytes + size > MAX_TOOL_BYTES:
-                                run.error_code = "tool_result_limit"
                                 raise RuntimeError("Tool result size limit")
                             run.tool_bytes += size
                         except (asyncio.CancelledError, Interrupted):
                             raise
                         except Exception:
-                            yield line({"type": "tool", "id": call_id, "name": name, "status": "failed", "error": "Não foi possível concluir a ferramenta."})
-                            raise
-                        tool_failed = isinstance(result, dict) and isinstance(result.get("error"), str)
+                            # A falha da ferramenta não derruba o turno: o modelo recebe o erro e pode responder sem ela.
+                            result = {"error": "Não foi possível concluir a ferramenta."}
+                            encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+                            run.tool_bytes += len(encoded.encode("utf-8"))
+                            tool_failed = True
+                        if isinstance(result, dict) and isinstance(result.get("error"), str):
+                            tool_failed = True
                         yield line({
                             "type": "tool", "id": call_id, "name": name,
                             "status": "failed" if tool_failed else "completed",

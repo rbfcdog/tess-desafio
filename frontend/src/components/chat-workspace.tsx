@@ -34,6 +34,11 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
   const [draft, setDraft] = useState("");
   const [renameTitle, setRenameTitle] = useState<string | null>(null);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 8000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
   const [booting, setBooting] = useState(true);
   const [reload, setReload] = useState(0);
   const [historyReload, setHistoryReload] = useState(0);
