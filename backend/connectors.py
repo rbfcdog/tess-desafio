@@ -261,7 +261,7 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
         message = json.loads(raw)
         bodies = []
         total = 0
-        BODY_BUDGET = 24000  # chars across all parts; keeps the JSON result under MAX_TOOL_RESULT_BYTES
+        BODY_BUDGET = 8000  # chars per message; keeps several reads under the per-run tool byte budget
         async def body(part, depth=0):
             nonlocal total
             if depth > 15 or total >= BODY_BUDGET or part.get("filename"):
@@ -284,7 +284,7 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
                         text = decoded.decode(content_type.get_content_charset() or "utf-8", "replace")
                     except (LookupError, UnicodeError):
                         text = decoded.decode("utf-8", "replace")
-                    chunk = text[: min(24000, BODY_BUDGET - total)]
+                    chunk = text[: min(8000, BODY_BUDGET - total)]
                     total += len(chunk)
                     bodies.append({"media_type": part["mimeType"], "text": chunk,
                                    **({"truncated": True} if len(chunk) < len(text) else {})})
@@ -310,8 +310,8 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
             raw, content_type = await get(url, {"alt": "media"})
         if content_type.startswith("text/") or mime in {"application/json", "application/xml"}:
             text = raw.decode("utf-8", "replace")
-            return {"file": metadata, "text": text[:24000], **({"truncated": True} if len(text) > 24000 else {})}
-        encoded = base64.b64encode(raw[:24576]).decode()  # ~32 KiB of base64, under MAX_TOOL_RESULT_BYTES
+            return {"file": metadata, "text": text[:12000], **({"truncated": True} if len(text) > 12000 else {})}
+        encoded = base64.b64encode(raw[:8192]).decode()  # ~11 KiB of base64, safe for repeated reads per turn
         return {"file": metadata, "media_type": content_type, "data_base64": encoded,
-                **({"truncated": True} if len(raw) > 24576 else {})}
+                **({"truncated": True} if len(raw) > 8192 else {})}
     raise ValueError("Unknown Google tool")
