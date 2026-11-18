@@ -10,9 +10,9 @@ from fastapi import HTTPException, Request
 from openai import AsyncOpenAI
 from starlette.responses import StreamingResponse
 
-from context import Context, SUMMARY_INSTRUCTIONS
-from service import Supabase
-from tools import ToolRegistry
+from services.context import Context, SUMMARY_INSTRUCTIONS
+from repositories.supabase import Supabase
+from services.tools import ToolRegistry
 
 TRUNCATION_NOTICE = "\n\n[Resposta interrompida no limite de saída. Envie outra mensagem para continuar.]"
 MAX_RESPONSE_BYTES = 262144

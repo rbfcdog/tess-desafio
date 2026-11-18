@@ -17,9 +17,9 @@ from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel, ConfigDict, Field
 
-from auth import User
-from connectors import connection, decrypt, encrypt, execute_google, google_configured, google_definitions
-from safe_http import request_bytes, safe_client, validate_url
+from api.deps import User
+from services.connectors import connection, decrypt, encrypt, execute_google, google_configured, google_definitions
+from core.safe_http import request_bytes, safe_client, validate_url
 
 router = APIRouter(prefix="/api/tools")
 MAX_RESULT_BYTES = 30000

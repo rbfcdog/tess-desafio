@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
-import connectors
+from services import connectors
 
 
 class GoogleContentTests(unittest.IsolatedAsyncioTestCase):

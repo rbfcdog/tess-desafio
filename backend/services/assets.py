@@ -20,8 +20,8 @@ from pypdf import PdfReader, PdfWriter, apply_configuration
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, StreamObject
 from starlette.datastructures import UploadFile
 
-from auth import User
-from service import Supabase
+from api.deps import User
+from repositories.supabase import Supabase
 
 router = APIRouter(prefix="/api")
 MAX_FILE_BYTES = 5 * 1024 * 1024

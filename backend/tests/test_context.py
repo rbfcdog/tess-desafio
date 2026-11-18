@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from context import Context, completed_turns
+from services.context import Context, completed_turns
 
 
 def history_with_turns(count=3):

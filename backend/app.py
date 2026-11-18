@@ -14,12 +14,13 @@ from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from starlette.exceptions import HTTPException
 
-from auth import User
-from assets import router as assets_router
-from connectors import router as connectors_router
-from chat import chat_response
-from service import Config, Supabase
-from tools import router as tools_router
+from api.deps import User
+from services.assets import router as assets_router
+from services.connectors import router as connectors_router
+from services.chat import chat_response
+from core.config import Config
+from repositories.supabase import Supabase
+from services.tools import router as tools_router
 
 
 @asynccontextmanager

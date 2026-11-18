@@ -29,14 +29,19 @@ frontend/
   Dockerfile / railway.json
   package.json / tsconfig.json / .env.example
 backend/
-  app.py / auth.py / service.py
-  chat.py / context.py       # Loop Responses, compactação e contabilização
-  assets.py                 # Arquivos privados e snapshots públicos
-  tools.py / safe_http.py    # Ferramentas, MCP e transporte protegido
-  connectors.py             # OAuth e ferramentas Google
-  test_*.py
-  supabase/migrations/      # Migrações incrementais, em ordem
-  supabase/tests/           # Invariantes de chat e conectores, com rollback
+  app.py                     # Composição: FastAPI, rotas de conversas/config/saúde, lifespan
+  api/deps.py                # Dependência de autenticação (Bearer Supabase)
+  core/config.py             # Configuração por ambiente (Config.from_env)
+  core/safe_http.py          # Transporte protegido: SSRF, limites de bytes, DNS pinado
+  repositories/supabase.py   # Gateway de dados: rpc, rows, histórico, settings, auditoria
+  services/chat.py           # Loop Responses, streaming, compactação e contabilização
+  services/context.py        # Montagem do contexto com resumos
+  services/tools.py          # Ferramentas nativas, web e MCP
+  services/connectors.py     # OAuth e ferramentas Google Drive/Gmail
+  services/assets.py         # Arquivos privados e snapshots públicos (rotas)
+  tests/                     # Suíte pytest do backend
+  supabase/migrations/       # Migrações incrementais, em ordem
+  supabase/tests/            # Invariantes de chat e conectores, com rollback
   Dockerfile / railway.json
   pyproject.toml / uv.lock / .env.example
 deploy/

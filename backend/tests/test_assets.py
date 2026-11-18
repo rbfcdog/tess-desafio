@@ -13,7 +13,7 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from starlette.requests import Request
 
-from assets import MAX_FILE_BYTES, _binary, model_parts, normalize_file, shared_attachment, upload_attachment
+from services.assets import MAX_FILE_BYTES, _binary, model_parts, normalize_file, shared_attachment, upload_attachment
 
 
 def png() -> bytes:
@@ -65,7 +65,7 @@ class FileBoundaryTests(unittest.TestCase):
                 normalize_file(data, name, mime)
 
     def test_image_decoding_limit_is_enforced_before_load(self):
-        with patch("assets.MAX_IMAGE_PIXELS", 4), self.assertRaises(HTTPException) as error:
+        with patch("services.assets.MAX_IMAGE_PIXELS", 4), self.assertRaises(HTTPException) as error:
             normalize_file(png(), "large.png", "image/png")
         self.assertEqual(error.exception.status_code, 422)
 

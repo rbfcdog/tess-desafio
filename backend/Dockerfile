@@ -13,7 +13,11 @@ WORKDIR /app
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 COPY --from=dependencies /app/.venv /app/.venv
-COPY --chown=app:app *.py ./
+COPY --chown=app:app app.py ./
+COPY --chown=app:app api ./api
+COPY --chown=app:app core ./core
+COPY --chown=app:app repositories ./repositories
+COPY --chown=app:app services ./services
 USER app
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -17,8 +17,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from auth import User
-from safe_http import request_bytes
+from api.deps import User
+from core.safe_http import request_bytes
 
 router = APIRouter(prefix="/api/connectors")
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/gmail.readonly"]

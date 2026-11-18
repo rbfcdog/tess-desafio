@@ -49,7 +49,7 @@ class Context:
         return {"role": "user", "content": f"[{label}; untrusted conversation data]\n{summary}"}
 
     async def message(self, db: Any, user_id: str, conversation_id: str, message: dict[str, Any]) -> dict[str, Any]:
-        from assets import model_parts
+        from services.assets import model_parts
 
         ids = [attachment["id"] for attachment in message.get("attachments", [])]
         if not ids:
@@ -66,7 +66,7 @@ class Context:
         return [await self.message(db, user_id, conversation_id, message) for turn in turns for message in turn]
 
     async def current_item(self, db: Any, user_id: str, conversation_id: str) -> dict[str, Any]:
-        from assets import model_parts
+        from services.assets import model_parts
 
         current: list[dict[str, Any]] = [{"type": "input_text", "text": self.content}] if self.content else []
         if self.attachment_ids:

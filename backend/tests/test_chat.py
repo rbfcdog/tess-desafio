@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
-from chat import Run, chat_response
-from context import Context
+from services.chat import Run, chat_response
+from services.context import Context
 from test_context import history_with_turns
 
 
@@ -97,7 +97,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
             create=AsyncMock(return_value=Stream(terminal())),
         ))
         self.request = SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
-        self.loader = patch("chat.ToolRegistry.load", AsyncMock(return_value=self.registry))
+        self.loader = patch("services.chat.ToolRegistry.load", AsyncMock(return_value=self.registry))
         self.loader.start()
         self.addCleanup(self.loader.stop)
         self.environment = patch.dict("os.environ", {
@@ -271,7 +271,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_multimodal_count_uses_actual_parts_before_generation(self):
         image = {"type": "input_image", "image_url": "data:image/png;base64,real-bytes"}
-        with patch("assets.model_parts", AsyncMock(return_value=[image])):
+        with patch("services.assets.model_parts", AsyncMock(return_value=[image])):
             events = await self.events(["image-id"])
         self.assertEqual(events[-1]["type"], "done")
         counted = self.provider.responses.input_tokens.count.await_args.kwargs
@@ -351,7 +351,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
     async def test_current_file_above_soft_threshold_is_allowed_below_hard_window(self):
         self.provider.responses.input_tokens.count.return_value = SimpleNamespace(input_tokens=20000)
         image = {"type": "input_image", "image_url": "data:image/png;base64,actual"}
-        with patch("assets.model_parts", AsyncMock(return_value=[image])):
+        with patch("services.assets.model_parts", AsyncMock(return_value=[image])):
             events = await self.events(["image-id"])
         self.assertEqual(events[-1]["type"], "done")
         self.assertEqual(self.reservations[0]["p_input_tokens"], 20000)
@@ -360,7 +360,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
     async def test_current_file_above_hard_window_never_generates_or_drops_file(self):
         self.provider.responses.input_tokens.count.return_value = SimpleNamespace(input_tokens=128000)
         image = {"type": "input_image", "image_url": "data:image/png;base64,actual"}
-        with patch("assets.model_parts", AsyncMock(return_value=[image])):
+        with patch("services.assets.model_parts", AsyncMock(return_value=[image])):
             events = await self.events(["image-id"])
         self.assertEqual(events[-1]["type"], "error")
         self.assertIn("arquivo atual", events[-1]["error"])
