@@ -40,6 +40,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
   const [streamNotice, setStreamNotice] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState<string | null>(null);
   const [toolsBusy, setToolsBusy] = useState(false);
   const [sharingBusy, setSharingBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -186,6 +187,39 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
     finally { if (!signal.aborted) { actionLock.current = false; setAction(null); } }
   }
 
+  async function deleteConversation(conversationId: string) {
+    if (actionLock.current || !lifetime.current) return;
+    const signal = lifetime.current.signal;
+    actionLock.current = true;
+    setAction("delete");
+    setError("");
+    let remainingCount = 0;
+    try {
+      await apiJson(client, `/conversations/${conversationId}`, signal, undefined, "DELETE");
+      if (signal.aborted) return;
+      const remaining = conversations.filter((item) => item.id !== conversationId);
+      remainingCount = remaining.length;
+      setConversations(remaining);
+      setDeleteArmed(null);
+      if (selectedId === conversationId) {
+        setHistory(null);
+        setHistoryLoading(false);
+        setSelectedId(null);
+        setDraft("");
+        setPendingAttachments([]);
+        setRenameTitle(null);
+        setStreamNotice("");
+      }
+    } catch (error) { if (!signal.aborted) setError(errorMessage(error)); }
+    finally {
+      if (!signal.aborted) {
+        actionLock.current = false;
+        setAction(null);
+        if (remainingCount === 0) await createConversation();
+      }
+    }
+  }
+
   async function signOut() {
     if (actionLock.current || !lifetime.current) return;
     const signal = lifetime.current.signal;
@@ -303,10 +337,21 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
           <nav id="conversation-list" aria-label="Histórico de conversas" className="conversation-list">
             {booting && <p role="status" className="muted text-sm">Carregando…</p>}
             {!booting && conversations.length > 0 && visibleConversations.length === 0 && <p role="status" className="muted text-sm">Sem resultados.</p>}
-            {visibleConversations.map((conversation) => <button key={conversation.id} type="button" aria-current={selectedId === conversation.id ? "page" : undefined} disabled={busy || booting} onClick={() => {
-              if (actionLock.current || selectedId === conversation.id) return;
-              setHistory(null); setHistoryLoading(true); setSelectedId(conversation.id); setRenameTitle(null); setDraft(""); setPendingAttachments([]); setError(""); setStreamNotice(""); setProgress("");
-            }}><span className="conversation-title" title={conversation.title}>{conversation.title}</span></button>)}
+            {visibleConversations.map((conversation) => <div className="conversation-row" key={conversation.id}>
+              <button type="button" aria-current={selectedId === conversation.id ? "page" : undefined} disabled={busy || booting} onClick={() => {
+                if (actionLock.current || selectedId === conversation.id) return;
+                setHistory(null); setHistoryLoading(true); setSelectedId(conversation.id); setRenameTitle(null); setDraft(""); setPendingAttachments([]); setError(""); setStreamNotice(""); setProgress("");
+              }}><span className="conversation-title" title={conversation.title}>{conversation.title}</span></button>
+              <button type="button" className="conversation-delete" aria-label={`Excluir ${conversation.title}`} disabled={busy || booting} onClick={() => {
+                if (actionLock.current) return;
+                if (deleteArmed !== conversation.id) {
+                  setDeleteArmed(conversation.id);
+                  window.setTimeout(() => setDeleteArmed((current) => current === conversation.id ? null : current), 4000);
+                  return;
+                }
+                void deleteConversation(conversation.id);
+              }}>{deleteArmed === conversation.id ? "Confirmar" : "Excluir"}</button>
+            </div>)}
           </nav>
         </div>
       </details>

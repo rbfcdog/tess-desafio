@@ -62,6 +62,11 @@ h1, h2, p { margin: 0; }
 .conversation-list > p { padding: 6px; }
 .conversation-list > button { width: 100%; border: 0; border-radius: 4px; padding: 9px 10px; background: transparent; color: var(--ink); text-align: left; }
 .conversation-list > button:hover:not(:disabled), .conversation-list > button[aria-current] { background: #eceef0; }
+.conversation-row { display: flex; align-items: stretch; gap: 2px; }
+.conversation-row > button { width: 100%; border: 0; border-radius: 4px; padding: 9px 10px; background: transparent; color: var(--ink); text-align: left; }
+.conversation-row > button:hover:not(:disabled), .conversation-row > button[aria-current] { background: #eceef0; }
+.conversation-row > .conversation-delete { flex: 0 0 auto; width: auto; align-self: center; border: 0; border-radius: 4px; padding: 4px 6px; background: transparent; color: var(--muted); font-size: 11px; }
+.conversation-row > .conversation-delete:hover:not(:disabled) { color: var(--danger, #b3261e); background: #eceef0; }
 .conversation-title { display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .usage-panel { border-top: 1px solid var(--line); font-size: 12px; }
 .usage-panel > summary { padding: 12px 0; font-weight: 500; }

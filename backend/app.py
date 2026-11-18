@@ -126,6 +126,11 @@ async def rename_conversation(conversation_id: UUID, body: ConversationRename, r
     )}
 
 
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: UUID, request: Request, user_id: User) -> dict:
+    return await request.app.state.db.rpc("delete_conversation", p_user_id=user_id, p_conversation_id=str(conversation_id))
+
+
 @app.get("/api/conversations/{conversation_id}/messages")
 async def messages(conversation_id: UUID, request: Request, user_id: User) -> dict:
     return await request.app.state.db.history(user_id, str(conversation_id))

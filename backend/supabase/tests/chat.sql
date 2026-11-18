@@ -15,6 +15,9 @@ declare
   v_foreign_message uuid;
   account public.usage_accounts;
   n integer;
+  c uuid;
+  s uuid;
+  total bigint;
 begin
   insert into auth.users(id,email) values (u1,u1::text||'@example.invalid'),(u2,u2::text||'@example.invalid');
   c1 := (public.create_conversation(u1,'First owner')->>'id')::uuid;
@@ -166,6 +169,75 @@ begin
   perform public.finish_run(u2,v_run_id,'failed','',15,5,'provider_failed');
   select * into account from public.usage_accounts where id='global';
   if account.used_tokens <> 101 or account.reserved_tokens <> 0 then raise exception 'Reported usage was not settled'; end if;
+
+  -- The first prompt names an unnamed conversation; renamed ones stay untouched.
+  update public.usage_accounts set limit_tokens=1000,used_tokens=0,reserved_tokens=0 where id='global';
+  c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
+  perform public.begin_run(u2,c,gen_random_uuid(),'Minha primeira pergunta'||chr(10)||'segunda linha','model',1);
+  if (select title from public.conversations where id=c) <> 'Minha primeira pergunta' then
+    raise exception 'Conversation was not named from the prompt';
+  end if;
+  c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
+  perform public.begin_run(u2,c,gen_random_uuid(),'Uma linha bem longa que passa de sessenta caracteres e ainda continua mais um pouco','model',1);
+  if (select title from public.conversations where id=c) <> 'Uma linha bem longa que passa de sessenta caracteres e' then
+    raise exception 'Long prompt title was not truncated at a word boundary';
+  end if;
+  c := (public.create_conversation(u2,'Meu nome escolhido')->>'id')::uuid;
+  perform public.begin_run(u2,c,gen_random_uuid(),'Outra pergunta','model',1);
+  if (select title from public.conversations where id=c) <> 'Meu nome escolhido' then
+    raise exception 'Renamed conversation was overwritten';
+  end if;
+  c := (public.create_conversation(u2,'Nova conversa')->>'id')::uuid;
+  insert into public.attachments(user_id,conversation_id,filename,media_type,size_bytes,page_count)
+    values (u2,c,'relatorio.pdf','application/pdf',2048,1) returning id into s;
+  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'','model',1,ARRAY[s]))->>'run_id';
+  if (select title from public.conversations where id=c) <> 'Nova conversa' then
+    raise exception 'Attachment-only run invented a title';
+  end if;
+  perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
+  update public.runs set created_at=now()-interval '5 minutes' where user_id=u2;
+  for v_run_id in select id from public.runs where user_id=u2 and status='running' loop
+    perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
+  end loop;
+
+  -- Deleting a conversation must not leak reservations nor keep shared links alive.
+  c := (public.create_conversation(u2,'Para excluir')->>'id')::uuid;
+  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'Historico para excluir','model',10)->>'run_id')::uuid;
+  perform public.finish_run(u2,v_run_id,'completed','Resposta',7,3,null);
+  update public.usage_accounts set used_tokens=0 where id='global';
+  begin
+    perform public.delete_conversation(u1,c);
+    raise exception 'Foreign owner deleted a conversation';
+  exception when raise_exception then
+    if sqlerrm <> 'CONVERSATION_NOT_FOUND' then raise; end if;
+  end;
+  perform public.delete_conversation(u2,c);
+  begin
+    perform public.delete_conversation(u2,c);
+    raise exception 'Second delete was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'CONVERSATION_NOT_FOUND' then raise; end if;
+  end;
+  if exists (select 1 from public.conversations where id=c) or exists (select 1 from public.messages where conversation_id=c)
+    or exists (select 1 from public.runs where conversation_id=c) then
+    raise exception 'Conversation deletion left data behind';
+  end if;
+  if not exists (select 1 from public.audit_events where user_id=u2 and event='conversation.deleted') then
+    raise exception 'Deletion audit is missing';
+  end if;
+  update public.runs set created_at=now()-interval '5 minutes' where user_id=u2;
+  v_run_id := (public.begin_run(u2,c2,gen_random_uuid(),'Reserva viva','model',10)->>'run_id')::uuid;
+  c := (public.create_conversation(u2,'Com execucao viva')->>'id')::uuid;
+  perform public.begin_run(u2,c,gen_random_uuid(),'Execucao em andamento','model',15);
+  select count(*),coalesce(sum(reserved_tokens),0) into n,total from public.runs where user_id=u2 and status='running';
+  if n <> 2 or total <> 25 then raise exception 'Fixture running runs were not as expected'; end if;
+  perform public.delete_conversation(u2,c);
+  select coalesce(sum(reserved_tokens),0) into total from public.runs where user_id=u2 and status='running';
+  if total <> 10 then raise exception 'Deletion leaked or stole a live reservation'; end if;
+  select used_tokens into total from public.usage_accounts where id='global';
+  if total <> 0 then raise exception 'Deletion changed settled usage'; end if;
+  perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
+
   perform set_config('test.chat_owner',u1::text,true);
   perform set_config('test.chat_foreign_conversation',c2::text,true);
 end;
@@ -255,6 +327,9 @@ begin
   end if;
   if has_function_privilege('authenticated','public.create_conversation(uuid,text)','EXECUTE') then
     raise exception 'Browser can invoke trusted mutation';
+  end if;
+  if has_function_privilege('authenticated','public.delete_conversation(uuid,uuid)','EXECUTE') then
+    raise exception 'Browser can invoke trusted deletion';
   end if;
   if has_function_privilege('authenticated','public.list_conversations(uuid)','EXECUTE')
     or has_function_privilege('authenticated','public.finish_unattempted_run(uuid,uuid,text,text,text)','EXECUTE') then
