@@ -72,10 +72,11 @@ class MessageCreate(BaseModel):
     content: Content = ""
     request_id: UUID
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    regenerate: bool = False
 
     @model_validator(mode="after")
     def require_message(self) -> "MessageCreate":
-        if not self.content and not self.attachment_ids:
+        if not self.regenerate and not self.content and not self.attachment_ids:
             raise ValueError("A message requires text or attachments")
         if len(set(self.attachment_ids)) != len(self.attachment_ids):
             raise ValueError("Duplicate attachments")
@@ -170,6 +171,7 @@ async def send_message(conversation_id: UUID, body: MessageCreate, request: Requ
     return await chat_response(
         request, db, request.app.state.provider, user_id,
         str(conversation_id), body.content, str(body.request_id), [str(item) for item in body.attachment_ids],
+        regenerate=body.regenerate,
     )
 
 

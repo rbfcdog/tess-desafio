@@ -32,3 +32,24 @@ export function serializeConversation(conversation: Conversation, history: Histo
     })),
   }, null, 2);
 }
+
+export function serializeConversationMarkdown(conversation: Conversation, history: History): string {
+  const heading = (role: string) => role === "user" ? "Você" : "Assistente";
+  const lines = [`# ${conversation.title}`, "", `_Exportado em ${new Date().toLocaleString("pt-BR")}_`, ""];
+  for (const message of history.messages) {
+    lines.push(`## ${heading(message.role)}`, "");
+    lines.push(message.content || "_(sem texto)_", "");
+    for (const attachment of message.attachments ?? []) {
+      lines.push(`- Anexo: ${attachment.filename} (${Math.max(1, Math.round(attachment.size_bytes / 1024))} KB)`);
+    }
+    if (message.attachments?.length) lines.push("");
+  }
+  const runs = history.runs.filter((run) => run.input_tokens !== null && run.output_tokens !== null);
+  if (runs.length) {
+    lines.push("## Consumo", "");
+    for (const run of runs) {
+      lines.push(`- ${run.model}: ${run.input_tokens} entrada · ${run.output_tokens} saída`);
+    }
+  }
+  return lines.join("\n") + "\n";
+}

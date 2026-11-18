@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { apiFetch, ApiError } from "./chat-api.ts";
 import { maxAttachmentBytes, retainUnsentAttachments, validateUploads } from "./attachments.ts";
+import { renderMarkdown } from "./markdown.ts";
+import { serializeConversationMarkdown } from "./conversations.ts";
 
 const image = { name: "foto.png", type: "image/png", size: 100 };
 
@@ -19,6 +21,32 @@ test("history synchronization keeps unsent attachments and removes attachments a
   assert.deepEqual(retainUnsentAttachments(selected, [{ role: "assistant", content: "Earlier reply" }]), selected);
   assert.deepEqual(retainUnsentAttachments(selected, [{ role: "user", attachments: [{ id: "first" }] }]), [second]);
   assert.deepEqual(selected, [first, second]);
+});
+
+test("markdown escapes html and renders the model subset", () => {
+  assert.equal(renderMarkdown("<script>alert(1)</script>"), "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>");
+  const styled = renderMarkdown("Texto **forte** e `código` aqui.");
+  assert.match(styled, /<strong>forte<\/strong>/);
+  assert.match(styled, /<code>código<\/code>/);
+  assert.match(renderMarkdown("- item um\n- item dois"), /<ul><li>item um<\/li><li>item dois<\/li><\/ul>/);
+  assert.match(renderMarkdown("1. passo\n2. passo"), /<ol><li>passo<\/li><li>passo<\/li><\/ol>/);
+  assert.match(renderMarkdown("[site](https://exemplo.com)"), /<a href="https:\/\/exemplo\.com" target="_blank" rel="noreferrer">site<\/a>/);
+  assert.doesNotMatch(renderMarkdown("[x](javascript:alert(1))"), /<a /);
+  assert.match(renderMarkdown("```py\ncode()\n```"), /<pre><code>code\(\)<\/code><\/pre>/);
+});
+
+test("markdown export keeps the title, messages, attachments and usage", () => {
+  const markdown = serializeConversationMarkdown(
+    { id: "c", title: "Título" },
+    { messages: [
+      { role: "user", content: "Pergunta" },
+      { role: "assistant", content: "Resposta", attachments: [{ filename: "a.png", size_bytes: 2048 }] },
+    ], runs: [{ model: "m", input_tokens: 5, output_tokens: 3 }] },
+  );
+  assert.match(markdown, /^# Título\n/);
+  assert.match(markdown, /## Você\n\nPergunta\n/);
+  assert.match(markdown, /Anexo: a\.png \(2 KB\)/);
+  assert.match(markdown, /- m: 5 entrada · 3 saída/);
 });
 
 test("attachment multipart and explicit deletion preserve auth without leaking tokens to URLs", async (t) => {

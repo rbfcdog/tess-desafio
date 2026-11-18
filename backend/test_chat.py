@@ -57,6 +57,8 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         async def rpc(name, **parameters):
             if name == "begin_run":
                 return {"run_id": "run", "user_message_id": "user-message", "assistant_message_id": "assistant-message"}
+            if name == "begin_regenerate_run":
+                return {"run_id": "run", "user_message_id": "user-1", "assistant_message_id": "assistant-message"}
             if name == "reserve_model_step":
                 if self.fail_reserve:
                     raise HTTPException(429, "budget exhausted")
@@ -99,6 +101,22 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
     async def events(self, attachment_ids=None):
         result = await chat_response(self.request, self.db, self.provider, "owner", "conversation", "Olá", "request", attachment_ids)
         return [json.loads(chunk) async for chunk in result.body_iterator]
+
+    async def test_regenerate_replays_the_last_user_prompt_without_duplicating_it(self):
+        self.history = {"messages": [
+            {"id": "user-1", "role": "user", "content": "Pergunta original", "status": "completed", "created_at": "t1"},
+        ], "runs": [], "summaries": []}
+        result = await chat_response(self.request, self.db, self.provider, "owner", "conversation", "", "request", regenerate=True)
+        events = [json.loads(chunk) async for chunk in result.body_iterator]
+        self.assertEqual(events[-1]["type"], "done")
+        begin = self.db.rpc.await_args_list[0]
+        self.assertEqual(begin.args[0], "begin_regenerate_run")
+        self.assertNotIn("p_content", begin.kwargs)
+        start = next(event for event in events if event["type"] == "start")
+        self.assertEqual(start["user_message_id"], "user-1")
+        prompt = self.provider.responses.create.await_args.kwargs["input"]
+        self.assertIn("Pergunta original", str(prompt))
+        self.assertEqual(str(prompt).count("Pergunta original"), 1)
 
     async def test_partial_failure_is_never_completed_and_unknown_usage_remains_reserved(self):
         self.provider.responses.create.return_value = Stream(

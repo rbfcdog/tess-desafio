@@ -14,7 +14,7 @@ def completed_turns(history: dict[str, Any]) -> list[list[dict[str, Any]]]:
     completed = {run["id"] for run in history["runs"] if run["status"] == "completed"}
     pairs: dict[str, list[dict[str, Any]]] = {}
     for message in history["messages"]:
-        if message["run_id"] in completed and message["status"] == "completed":
+        if message.get("run_id") in completed and message["status"] == "completed":
             pairs.setdefault(message["run_id"], []).append(message)
     return [
         pair for pair in pairs.values()

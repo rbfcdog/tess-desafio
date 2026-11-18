@@ -238,6 +238,52 @@ begin
   if total <> 0 then raise exception 'Deletion changed settled usage'; end if;
   perform public.finish_run(u2,v_run_id,'failed','',0,0,'no_provider_call');
 
+  -- Regeneration replaces replies after the retained prompt and reuses its attachments.
+  c := (public.create_conversation(u2,'Para regenerar')->>'id')::uuid;
+  insert into public.attachments(user_id,conversation_id,filename,media_type,size_bytes,page_count)
+    values (u2,c,'imagem.png','image/png',512,null) returning id into s;
+  v_run_id := (public.begin_run(u2,c,gen_random_uuid(),'Pergunta original','model',10,ARRAY[s]))->>'run_id';
+  perform public.finish_run(u2,v_run_id::uuid,'completed','Primeira resposta',5,5,null);
+  v_run_id := (public.begin_regenerate_run(u2,c,gen_random_uuid(),'model',10))->>'run_id';
+  select count(*) into n from public.messages where conversation_id=c and role='user';
+  if n <> 1 then raise exception 'Regeneration duplicated the user message'; end if;
+  if not exists (select 1 from public.messages where conversation_id=c and role='assistant' and status='running') then
+    raise exception 'Regeneration did not start a fresh reply';
+  end if;
+  if not exists (select 1 from public.message_attachments ma join public.messages m on m.id=ma.message_id
+    where m.conversation_id=c and m.role='user') then
+    raise exception 'Regeneration lost the prompt attachments';
+  end if;
+  begin
+    perform public.begin_run(u2,c,gen_random_uuid(),'Concorrente','model',1);
+    raise exception 'Regenerate allowed a concurrent run';
+  exception when raise_exception then
+    if sqlerrm <> 'RUN_ALREADY_ACTIVE' then raise; end if;
+  end;
+  begin
+    perform public.begin_regenerate_run(u1,c,gen_random_uuid(),'model',1);
+    raise exception 'Foreign owner regenerated a run';
+  exception when raise_exception then
+    if sqlerrm <> 'CONVERSATION_NOT_FOUND' then raise; end if;
+  end;
+  perform public.finish_run(u2,v_run_id::uuid,'completed','Segunda resposta',6,4,null);
+  select count(*) into n from public.messages where conversation_id=c and role='assistant' and content='Segunda resposta' and status='completed';
+  if n <> 1 then raise exception 'Regenerated reply was not persisted'; end if;
+  if exists (select 1 from public.messages where conversation_id=c and role='assistant' and content='Primeira resposta') then
+    raise exception 'Old reply survived regeneration';
+  end if;
+  select count(*) into n from public.messages where conversation_id=c;
+  if n <> 2 then raise exception 'Regeneration changed the message count unexpectedly'; end if;
+  c := (public.create_conversation(u2,'Sem mensagens')->>'id')::uuid;
+  begin
+    perform public.begin_regenerate_run(u2,c,gen_random_uuid(),'model',1);
+    raise exception 'Regeneration started without a prompt';
+  exception when raise_exception then
+    if sqlerrm <> 'INVALID_RUN' then raise; end if;
+  end;
+  if has_function_privilege('authenticated','public.begin_regenerate_run(uuid,uuid,uuid,text,bigint)','EXECUTE') then
+    raise exception 'Browser can invoke trusted regeneration';
+  end if;
   perform set_config('test.chat_owner',u1::text,true);
   perform set_config('test.chat_foreign_conversation',c2::text,true);
 end;

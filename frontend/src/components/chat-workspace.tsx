@@ -8,8 +8,10 @@ import { AttachmentPicker, AttachmentView } from "@/components/attachments";
 import { ToolsPanel } from "@/components/tools-panel";
 import { SharingPanel } from "@/components/sharing-panel";
 import { ExecutionTraces } from "@/components/execution-traces";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { CopyMessage, ExportConversation } from "@/components/conversation-actions";
 import { filterConversations } from "@/lib/conversations";
+import { renderMarkdown } from "@/lib/markdown";
 import { retainUnsentAttachments } from "@/lib/attachments";
 
 const numbers = new Intl.NumberFormat("pt-BR");
@@ -237,8 +239,17 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
     event.preventDefault();
     const content = draft.trim();
     if (actionLock.current || busy || !selectedId || !history || (!content && !pendingAttachments.length) || content.length > 16000 || running || needsSync || booting || historyLoading || !config?.chat_configured || !lifetime.current) return;
+    await runStream(content, pendingAttachments, false);
+  }
+
+  async function regenerateMessage() {
+    if (actionLock.current || busy || !selectedId || !history || running || needsSync || booting || historyLoading || !config?.chat_configured || !lifetime.current) return;
+    await runStream("", [], true);
+  }
+
+  async function runStream(content: string, attachments: Attachment[], regenerate: boolean) {
     const conversationId = selectedId;
-    const attachments = pendingAttachments;
+    if (!conversationId || !lifetime.current) return;
     const signal = lifetime.current.signal;
     const controller = new AbortController();
     const abortStream = () => controller.abort();
@@ -253,7 +264,9 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
     let assistantId: string | undefined;
     let runId: string | undefined;
     try {
-      const response = await apiFetch(client, `/conversations/${conversationId}/messages`, controller.signal, { content, request_id: crypto.randomUUID(), attachment_ids: attachments.map((attachment) => attachment.id) });
+      const response = await apiFetch(client, `/conversations/${conversationId}/messages`, controller.signal, regenerate
+        ? { content: "", request_id: crypto.randomUUID(), regenerate: true }
+        : { content, request_id: crypto.randomUUID(), attachment_ids: attachments.map((attachment) => attachment.id) });
       if (!response.headers.get("content-type")?.toLowerCase().includes("application/x-ndjson") || !response.body) {
         await response.body?.cancel();
         throw new Error("Resposta inválida. Atualize a conversa.");
@@ -264,13 +277,21 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
           assistantId = event.assistant_message_id;
           runId = event.run_id;
           // Database timestamps arrive only in the authoritative history, not the start event.
-          const messages: Message[] = [
-            { id: event.user_message_id, role: "user", content, status: "completed", run_id: event.run_id, created_at: "", attachments },
-            { id: event.assistant_message_id, role: "assistant", content: "", status: "running", run_id: event.run_id, created_at: "" },
-          ];
-          setHistory((current) => current ? { ...current, messages: [...current.messages, ...messages] } : current);
-          setDraft("");
-          setPendingAttachments([]);
+          let messages: Message[];
+          if (regenerate) {
+            // The retained user message stays; replies after it are replaced by the new run.
+            const lastUserIndex = (history?.messages ?? []).map((message) => message.role).lastIndexOf("user");
+            messages = [{ id: event.assistant_message_id, role: "assistant", content: "", status: "running", run_id: event.run_id, created_at: "" }];
+            setHistory((current) => current ? { ...current, messages: [...current.messages.slice(0, lastUserIndex + 1), ...messages] } : current);
+          } else {
+            messages = [
+              { id: event.user_message_id, role: "user", content, status: "completed", run_id: event.run_id, created_at: "", attachments },
+              { id: event.assistant_message_id, role: "assistant", content: "", status: "running", run_id: event.run_id, created_at: "" },
+            ];
+            setHistory((current) => current ? { ...current, messages: [...current.messages, ...messages] } : current);
+            setDraft("");
+            setPendingAttachments([]);
+          }
           setStreamPhase("streaming");
         } else if (event.type === "delta") {
           setProgress("");
@@ -325,6 +346,8 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
   }
 
   const canSend = !busy && !booting && !historyLoading && !needsSync && !!selectedId && !!history && !running && !!config?.chat_configured && (!!draft.trim() || pendingAttachments.length > 0) && draft.trim().length <= 16000 && (usage === null || usage.remaining_tokens > 0);
+  const lastAssistantId = history?.messages.filter((message) => message.role === "assistant").at(-1)?.id;
+  const canRegenerate = !busy && !booting && !historyLoading && !needsSync && !!selectedId && !!history && !running && !!config?.chat_configured;
 
   return <main className="workspace">
     <aside className="sidebar" aria-label="Navegação das conversas">
@@ -359,7 +382,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
         <summary>Saldo <span>{usage ? `${numbers.format(usage.remaining_tokens)} tokens` : "—"}</span></summary>
         {usage && <dl className="usage-details"><div><dt>Usados</dt><dd>{numbers.format(usage.used_tokens)}</dd></div><div><dt>Reservados</dt><dd>{numbers.format(usage.reserved_tokens)}</dd></div><div><dt>Limite global</dt><dd>{numbers.format(usage.limit_tokens)}</dd></div><div><dt>Seu uso</dt><dd>{numbers.format(usage.user_tokens)}</dd></div></dl>}
       </details>
-      <footer className="account"><span title={email}>{email}</span><button type="button" className="text-button" onClick={signOut} disabled={busy}>{action === "signout" ? "Saindo…" : "Sair"}</button></footer>
+      <footer className="account"><span title={email}>{email}</span><ThemeToggle /><button type="button" className="text-button" onClick={signOut} disabled={busy}>{action === "signout" ? "Saindo…" : "Sair"}</button></footer>
     </aside>
 
     <section className="chat-pane" aria-labelledby="conversation-heading">
@@ -390,8 +413,8 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
         {historyLoading ? <p role="status" className="empty-state">Carregando…</p> : !selectedId ? null : !history ? <div className="empty-state"><p>Histórico indisponível.</p><button type="button" className="button secondary" disabled={busy} onClick={() => { setHistoryLoading(true); setHistoryReload((value) => value + 1); }}>Tentar novamente</button></div> : history.messages.length === 0 ? null : <ol className="message-list">{history.messages.map((message) => {
           const run = history.runs.find((item) => item.id === message.run_id);
           return <li key={message.id} className={`message ${message.role}`}><article aria-label={message.role === "user" ? "Sua mensagem" : "Resposta do assistente"}>
-            <div className="message-heading"><h2 title={message.created_at ? dates.format(new Date(message.created_at)) : undefined}>{message.role === "user" ? "Você" : "Assistente"}</h2>{message.content && <CopyMessage text={message.content} disabled={message.status === "running"} />}</div>
-            <div className="message-content">{message.content}</div>
+            <div className="message-heading"><h2 title={message.created_at ? dates.format(new Date(message.created_at)) : undefined}>{message.role === "user" ? "Você" : "Assistente"}</h2>{message.content && <CopyMessage text={message.content} disabled={message.status === "running"} />}{message.role === "assistant" && message.id === lastAssistantId && message.status !== "running" && <button type="button" className="text-button" disabled={!canRegenerate} onClick={() => void regenerateMessage()}>Regenerar</button>}</div>
+            <div className="message-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
             {!!message.attachments?.length && <div className="message-attachments">{message.attachments.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} client={client} />)}</div>}
             {message.role === "assistant" && <details className="run-details">
               <summary>{message.status === "completed" ? "Detalhes" : message.status === "running" && streamPhase === "syncing" ? "Confirmando…" : statuses[message.status]}{message.status !== "running" && (!run || run.input_tokens === null || run.output_tokens === null) ? " · uso desconhecido" : ""}</summary>

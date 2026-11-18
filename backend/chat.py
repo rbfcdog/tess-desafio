@@ -303,13 +303,20 @@ class Run:
 async def chat_response(
     request: Request, db: Supabase, provider: AsyncOpenAI, user_id: str,
     conversation_id: str, content: str, request_id: str, attachment_ids: list[str] | None = None,
+    *, regenerate: bool = False,
 ) -> StreamingResponse:
     try:
-        identifiers = await db.rpc(
-            "begin_run", p_user_id=user_id, p_conversation_id=conversation_id,
-            p_request_id=request_id, p_content=content, p_model=db.config.model,
-            p_reserved_tokens=1, p_attachment_ids=attachment_ids or [],
-        )
+        if regenerate:
+            identifiers = await db.rpc(
+                "begin_regenerate_run", p_user_id=user_id, p_conversation_id=conversation_id,
+                p_request_id=request_id, p_model=db.config.model, p_reserved_tokens=1,
+            )
+        else:
+            identifiers = await db.rpc(
+                "begin_run", p_user_id=user_id, p_conversation_id=conversation_id,
+                p_request_id=request_id, p_content=content, p_model=db.config.model,
+                p_reserved_tokens=1, p_attachment_ids=attachment_ids or [],
+            )
     except HTTPException as exc:
         if exc.status_code in {409, 429}:
             await db.audit(user_id, "run.denied", status=exc.status_code)
@@ -325,13 +332,21 @@ async def chat_response(
             # Snapshot only AFTER acquiring the conversation's active slot. Failed/running turns
             # remain in raw history, but never become model context or summary coverage.
             history = await run.wait(db.history(user_id, conversation_id))
+            prompt_content, prompt_attachments = content, attachment_ids or []
+            if regenerate:
+                last_user = next((message for message in reversed(history["messages"])
+                                  if message["role"] == "user" and message["status"] == "completed"), None)
+                if last_user is None:
+                    raise HTTPException(422, "Não há mensagem para regenerar.")
+                prompt_content = last_user["content"]
+                prompt_attachments = [attachment["id"] for attachment in last_user.get("attachments", [])]
             summaries = await run.wait(db.rows(
                 "context_summaries", select="id,run_id,through_message_id,scope,summary,created_at",
                 user_id=f"eq.{user_id}", conversation_id=f"eq.{conversation_id}",
                 scope="eq.history", order="created_at.asc,id.asc",
             ))
             settings = await run.wait(db.settings(user_id))
-            context = Context({**history, "summaries": summaries}, settings["system_prompt"], content, attachment_ids or [])
+            context = Context({**history, "summaries": summaries}, settings["system_prompt"], prompt_content, prompt_attachments)
             registry = await run.wait(ToolRegistry.load(db, user_id, conversation_id, run.run_id))
             current = await run.wait(context.current_item(db, user_id, conversation_id))
             minimum = ([{"role": "system", "content": context.system_prompt}] if context.system_prompt else []) + [current]

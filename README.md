@@ -210,6 +210,17 @@ As correções de retry e atualização foram exercitadas no frontend reconstru�
 
 O smoke de confirmação perdida executou o fluxo real do backend e a persistência real, com perda de resposta de reserva injetada e um contador de tokens de teste: a execução terminou como falha, cobrou zero e permitiu novo envio imediato, sem geração do modelo. A listagem devolveu 1.001 IDs distintos mesmo com renomeação entre a leitura do snapshot e sua entrega; o endpoint HTTP autenticado também retornou todos os IDs. No navegador, renomeação e submit programático ficaram bloqueados durante refresh, e o nome salvo depois permaneceu no refresh seguinte. Todos os dados temporários foram removidos.
 
+## Roteiro de demonstração
+
+1. **Login e cadastro**: entre com uma conta própria (ou crie) — a primeira conversa surge automaticamente.
+2. **Chat real**: envie uma pergunta; a conversa é nomeada pela mensagem e a resposta chega em streaming com Markdown formatado. Use **Regenerar** na última resposta para repetir com nova geração.
+3. **Visão e documentos**: anexe uma imagem ou PDF e pergunte sobre o conteúdo (ex.: "resuma este documento em 3 frases").
+4. **Ferramentas**: "Pesquise na web X e cite a fonte" (busca nativa); "Use a ferramenta Exa/Microsoft Learn/Context7..." (MCP habilitado em Ferramentas).
+5. **Compactação**: cole um texto bem longo (acima de ~16 mil tokens) e observe o evento "Resumindo contexto anterior" preservando o histórico original.
+6. **Compartilhamento**: Compartilhar → criar link, abrir em janela anônima (sem login), depois revogar e recarregar o link.
+7. **Exportar**: baixe o histórico em JSON ou Markdown; tema claro/escuro no rodapé da barra lateral.
+8. **Consumo**: painel Saldo mostra reserva e consumo por execução; Detalhes de cada resposta mostra o modelo e os tokens.
+
 ## Publicação cloud
 
 Há Dockerfiles e `railway.json` nos dois serviços. Crie/selecione **dois serviços próprios autorizados** e um Supabase cloud; configure os ambientes acima. O frontend precisa das variáveis públicas e `BACKEND_URL` no build. Use HTTPS, segredo privado somente no backend e os limites financeiros do provedor.
