@@ -342,7 +342,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
                 if (actionLock.current || selectedId === conversation.id) return;
                 setHistory(null); setHistoryLoading(true); setSelectedId(conversation.id); setRenameTitle(null); setDraft(""); setPendingAttachments([]); setError(""); setStreamNotice(""); setProgress("");
               }}><span className="conversation-title" title={conversation.title}>{conversation.title}</span></button>
-              <button type="button" className="conversation-delete" aria-label={`Excluir ${conversation.title}`} disabled={busy || booting} onClick={() => {
+              <button type="button" className="conversation-delete" aria-label={deleteArmed === conversation.id ? `Confirmar exclusão de ${conversation.title}` : `Excluir ${conversation.title}`} disabled={busy || booting} onClick={() => {
                 if (actionLock.current) return;
                 if (deleteArmed !== conversation.id) {
                   setDeleteArmed(conversation.id);

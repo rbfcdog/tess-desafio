@@ -103,7 +103,7 @@ Configure Site URL/redirects de autenticação para a origem utilizada; no ambie
 | `MAX_MODEL_STEPS` / `MAX_TOOL_CALLS` | Padrão `8` para cada limite por execução |
 | `ENCRYPTION_KEY` | Chave Fernet estável para credenciais de ferramentas e Google |
 | `PUBLIC_APP_URL` | Origem pública do frontend; local preparado em `http://localhost:3005` |
-| `MCP_TRUSTED_HOSTS` | Hosts públicos exatos, separados por vírgula; exemplo `mcp.context7.com` |
+| `MCP_TRUSTED_HOSTS` | Hosts públicos exatos, separados por vírgula; exemplo `mcp.context7.com,learn.microsoft.com,mcp.exa.ai` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Cliente OAuth Google, se usar o conector |
 | `GOOGLE_REDIRECT_URI` | Retorno exato em `<PUBLIC_APP_URL>/api/connectors/google/callback` |
 | `PORT` | Padrão `3001` |
@@ -148,7 +148,7 @@ Se o npm apresentar `EALLOWSCRIPTS` por configuração externa, use `npm --userc
 - **Google:** habilite Drive API e Gmail API no projeto Google, configure a tela de consentimento/usuários de teste e autorize o redirect exato. A interface oferece pesquisa e leitura, não envio de e-mail ou escrita em arquivos. OAuth usa PKCE, state de uso único associado ao navegador e credenciais criptografadas; desconectar impede reutilização dos tokens salvos. A leitura Gmail busca corpos MIME externos quando o [MessagePartBody](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages.attachments#MessagePartBody) contém `attachmentId`, respeita o charset declarado e não mistura arquivos anexados com o corpo do e-mail.
 - **Contexto:** conta as entradas multimodais reais antes da geração. Ao atingir o limiar, resume turnos completos, persiste o resumo e continua no mesmo envio sem apagar mensagens. Também preserva pares de chamada/resultado de ferramentas. Se o próprio envio atual exceder a janela real, retorna erro antes de gerar, sem remover silenciosamente seus arquivos.
 - **Execuções:** NDJSON com texto, andamento, ferramentas e compactação; falhas/cancelamentos preservam texto parcial. Há limites de chamadas e duração, idempotência por `request_id`, uma execução ativa por conversa e até dez novas execuções por usuário/minuto.
-- **Conversas:** a listagem usa um único snapshot do banco, em ordem de atualização, sem páginas por offset que possam duplicar ou omitir conversas durante renomeações concorrentes.
+- **Conversas:** a listagem usa um único snapshot do banco, em ordem de atualização, sem páginas por offset que possam duplicar ou omitir conversas durante renomeações concorrentes. A primeira mensagem nomeia a conversa automaticamente, respeitando um nome escolhido manualmente; a exclusão é explícita, em dois cliques, remove mensagens, execuções, anexos e links de compartilhamento e libera reservas de execuções em andamento.
 
 ## Usabilidade adicional
 
