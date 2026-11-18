@@ -83,6 +83,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
         setHistoryLoading(list.conversations.length > 0);
         setSelectedId((current) => list.conversations.find((conversation) => conversation.id === (current ?? previous))?.id ?? list.conversations[0]?.id ?? null);
         setHistoryReload((value) => value + 1);
+        if (!list.conversations.length) await createConversation();
       } catch (error) {
         if (!controller.signal.aborted) setError(errorMessage(error));
       } finally { if (!controller.signal.aborted) setBooting(false); }
