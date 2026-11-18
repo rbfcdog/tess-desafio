@@ -242,7 +242,20 @@ async def execute_google(db, user_id: str, name: str, arguments: dict) -> dict:
         raw, _ = await get("https://gmail.googleapis.com/gmail/v1/users/me/messages", {
             "q": arguments["query"], "maxResults": 20, "pageToken": arguments.get("page_token", ""),
         })
-        return json.loads(raw)
+        listing = json.loads(raw)
+        messages = listing.get("messages", [])
+        if messages:
+            async def brief(message_id):
+                try:
+                    raw, _ = await get("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + message_id, {"format": "metadata"})
+                    message = json.loads(raw)
+                    headers = {h["name"].lower(): h["value"] for h in message.get("payload", {}).get("headers", [])
+                               if h.get("name", "").lower() in {"from", "subject", "date"}}
+                    return {"id": message["id"], "snippet": message.get("snippet"), **headers}
+                except Exception:
+                    return {"id": message_id}
+            listing["messages"] = list(await asyncio.gather(*(brief(m["id"]) for m in messages[:5]))) + messages[5:]
+        return listing
     if name == "gmail_read":
         raw, _ = await get("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + arguments["message_id"], {"format": "full"})
         message = json.loads(raw)
