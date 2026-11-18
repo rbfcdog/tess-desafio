@@ -227,7 +227,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events[-1]["type"], "done")
         failed = [event for event in events if event["type"] == "tool"]
         self.assertEqual([event["status"] for event in failed], ["running", "failed", "running", "completed"])
-        self.assertEqual(failed[1]["error"], "Não foi possível concluir a ferramenta.")
+        self.assertEqual(failed[1]["error"], "A ferramenta lookup falhou agora e pode funcionar se tentada novamente.")
         second = self.provider.responses.create.await_args_list[1].kwargs
         replay = [item for item in second["input"] if item.get("type") == "function_call_output"]
         self.assertEqual(replay[0]["call_id"], "call-1")
