@@ -6,18 +6,18 @@ Chat com frontend Next.js/TypeScript e backend Python/FastAPI independentes. Sem
 
 | Área | Implementação | Verificação realizada |
 |---|---|---|
-| Usuários, múltiplas conversas, histórico e configurações | Persistência, isolamento por usuário, streaming e estados de execução | Supabase local real, API e navegador |
-| Ferramentas e internet | Busca nativa OpenAI, leitura de páginas HTTPS, cadastro de ferramentas HTTP GET | Scraping e HTTP executados contra serviço público real; busca nativa depende da chave OpenAI |
-| Imagens e PDFs | Upload privado, normalização, prévia/download e entradas multimodais nativas | Uploads, persistência e permissões reais; análise pelo modelo depende da chave OpenAI |
-| Compartilhamento | Snapshot público somente leitura, arquivos delimitados, expiração e revogação | API e navegador sem autenticação; revogação bloqueou novo acesso |
-| Compactação automática | Resumos persistidos, histórico original preservado, consumo contabilizado | Testes do fluxo e invariantes SQL; geração real de resumo depende da chave OpenAI |
+| Usuários, múltiplas conversas, histórico e configurações | Persistência, isolamento por usuário, streaming, título por IA, exclusão e estados de execução | Supabase real, API e navegador, local e em produção |
+| Ferramentas e internet | Busca nativa OpenAI, leitura de páginas HTTPS, cadastro de ferramentas HTTP GET e MCP remotos | Geração real em produção: busca nativa com fontes citadas, scraping e MCP (Context7, Microsoft Learn, Exa) |
+| Imagens e PDFs | Upload privado, normalização, prévia/download e entradas multimodais nativas | Geração real em produção: imagem descrita corretamente e PDF lido com extração e cálculo |
+| Compartilhamento | Snapshot público somente leitura, arquivos delimitados, expiração e revogação | Leitura anônima, expiração e revogação (404) verificadas no endereço público |
+| Compactação automática | Resumos persistidos, histórico original preservado, consumo contabilizado | Geração real em produção: 4 turnos acumulados, evento de compactação aos 16.675 tokens, resumo persistido e histórico intacto |
 | Cap global e auditoria | Reservas transacionais por chamada, consumo e eventos persistidos | Testes de comportamento e PostgreSQL real |
-| MCP | Servidores remotos autorizados, descoberta e seleção explícita de ferramentas | Descoberta e execução reais no Context7 |
-| Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Fluxo local com Auth/PostgreSQL reais e respostas Google de teste; autorização Google real ainda exige credenciais |
-| Produção | Dockerfiles não-root, healthchecks e configuração Railway | Ambas as imagens construídas e iniciadas; endpoints responderam HTTP 200 |
-| Vídeo | `artifacts/demo.mp4`, aproximadamente 34 segundos | Gravação de interações reais, sem respostas de IA simuladas |
+| MCP | Servidores remotos autorizados, descoberta e seleção explícita de ferramentas | Descoberta e execução reais no Context7, Microsoft Learn e Exa (incluindo fetch de PDF por URL) |
+| Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Configurado em produção; consent screen alcançada com cliente real; autorização de conta aguardando o responsável |
+| Produção | Dockerfiles não-root, healthchecks e configuração Railway | Aplicação pública em https://frontend-production-126c9ad0.up.railway.app com chat, visão, ferramentas, compactação, contabilidade e compartilhamento verificados no endereço público |
+| Vídeo | `artifacts/demo.mp4` | Gravação anterior mostra os fluxos sem geração de IA; a gravação final será atualizada com as respostas reais antes da entrega |
 
-**Ainda não há URL cloud pública.** A CLI oficial Railway retornou `Unauthorized`; não há autorização para um serviço cloud selecionado. Também não há `OPENAI_API_KEY` nem credenciais Google disponíveis. Não foram criadas contas pagas, reutilizados projetos alheios ou inventadas respostas do modelo. Portanto, a avaliação completa do desafio ainda exige configurar essas credenciais, validar o provedor real e publicar a aplicação.
+**Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios. O diferencial Google está configurado no servidor e aguarda a autorização de uma conta real para o fluxo completo; contas de teste usadas nas verificações foram removidas.
 
 O vídeo demonstra autenticação, cadastro de ferramenta, imagens/PDFs persistentes, compartilhamento sem login, revogação e layout móvel. Os registros técnicos de ferramentas foram produzidos por chamadas reais sem geração de LLM; as execuções correspondentes aparecem corretamente como sem resposta do modelo. O vídeo não comprova vision, resumo ou conversa gerados pela OpenAI, nem deploy público.
 
@@ -186,7 +186,7 @@ uv --directory backend run --locked python -m unittest -v
 python -m unittest discover -s deploy -p 'test_*.py' -v
 ```
 
-Resultados exercitados: lint/typecheck/build do frontend, treze testes frontend, 42 testes backend aprovados e um teste condicional de PostgreSQL não executado pelo unittest sem sua variável de conexão. O teste de limites do deploy também passou. O fluxo real de navegador terminou sem exceções de JavaScript; evidências estão em `artifacts/`.
+Resultados exercitados: lint/typecheck/build do frontend, quinze testes frontend, 47 testes backend aprovados e um teste condicional de PostgreSQL não executado pelo unittest sem sua variável de conexão. O teste de limites do deploy também passou. O fluxo real de navegador terminou sem exceções de JavaScript; evidências estão em `artifacts/`.
 
 Com Supabase local de desenvolvimento disponível, os checks SQL fazem rollback dos dados de teste:
 
