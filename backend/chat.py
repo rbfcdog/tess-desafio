@@ -360,10 +360,10 @@ async def chat_response(
                                     "Responda somente com o titulo, sem aspas, com no maximo 40 caracteres.\n\n"
                                     f"Mensagem: {prompt_content[:600]}")
                     title_count = await run.count([{"role": "user", "content": title_prompt}], [])
-                    await run.reserve("reply", title_count, 32)
+                    await run.reserve("reply", title_count, 200)
                     title_response = await run.wait(provider.responses.create(
                         model=db.config.model, input=[{"role": "user", "content": title_prompt}],
-                        tools=[], max_output_tokens=32, store=False, stream=False, truncation="disabled",
+                        tools=[], max_output_tokens=200, store=False, stream=False, truncation="disabled",
                     ))
                     run.observe_usage(title_response)
                     candidate = response_text(title_response).strip().strip('"').strip()[:60]

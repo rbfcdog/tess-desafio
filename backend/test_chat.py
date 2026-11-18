@@ -140,7 +140,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         events = await self.events()
         self.assertEqual(events[-1]["type"], "done")
         self.assertEqual(self.renames, ["Fotossintese explicada"])
-        title_step = next(step for step in self.reservations if step["p_max_output_tokens"] == 32)
+        title_step = next(step for step in self.reservations if step["p_max_output_tokens"] == 200)
         self.assertEqual(title_step["p_kind"], "reply")
         completed = [record for record in self.records if record["p_input_tokens"] == 30]
         self.assertEqual(completed[0]["p_output_tokens"], 6)
