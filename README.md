@@ -15,9 +15,8 @@ Chat com frontend Next.js/TypeScript e backend Python/FastAPI independentes. Sem
 | MCP | Servidores remotos autorizados, descoberta e seleção explícita de ferramentas | Descoberta e execução reais no Context7, Microsoft Learn e Exa (incluindo fetch de PDF por URL) |
 | Google Drive/Gmail | OAuth, pesquisa/leitura, refresh e desconexão | Verificado em produção com conta real: busca listou arquivos reais do Drive e o Gmail resumiu e-mails verdadeiros; tokens criptografados no banco |
 | Produção | Dockerfiles não-root, healthchecks e configuração Railway | Aplicação pública em https://frontend-production-126c9ad0.up.railway.app com chat, visão, ferramentas, compactação, contabilidade e compartilhamento verificados no endereço público |
-| Vídeo | `artifacts/demo-narrado.mp4` (narrado, corte totalmente dinâmico), 40s, 1280×860 | Gravação contínua em produção na conta real: login, sugestões de início, clima e câmbio por ferramentas nativas em paralelo com follow-ups sugeridos, visão de gráfico + PDF em uma mensagem, MCP (Context7), Google Drive e Gmail reais, link público e tema escuro |
 
-**Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios e diferenciais — incluindo Google Drive/Gmail autorizados com uma conta real. O cadastro é imediato (sem confirmação por e-mail) e o vídeo em `artifacts/demo.mp4` registra os fluxos ponta a ponta em produção.
+**Estado atual:** a aplicação está publicada em URL cloud própria, com o provedor real (OpenAI `gpt-6-luna`) validado em todos os fluxos obrigatórios e diferenciais — incluindo Google Drive/Gmail autorizados com uma conta real. O cadastro é imediato, sem confirmação por e-mail.
 
 ## Estrutura
 
@@ -46,7 +45,6 @@ backend/
   pyproject.toml / uv.lock / .env.example
 deploy/
   railway.py / test_railway.py
-artifacts/                  # Artefatos locais, não versionados
   demo.mp4                  # Demonstração local legendada
   demo-*.png                # Evidências visuais
   verification.json         # Resultado do smoke de navegador e suas limitações
@@ -189,7 +187,7 @@ uv --directory backend run --locked python -m unittest -v
 python -m unittest discover -s deploy -p 'test_*.py' -v
 ```
 
-Resultados exercitados: lint/typecheck/build do frontend, quinze testes frontend, 47 testes backend aprovados e um teste condicional de PostgreSQL não executado pelo unittest sem sua variável de conexão. O teste de limites do deploy também passou. O fluxo real de navegador terminou sem exceções de JavaScript; evidências estão em `artifacts/`.
+Resultados exercitados: lint/typecheck/build do frontend, quinze testes frontend, 47 testes backend aprovados e um teste condicional de PostgreSQL não executado pelo unittest sem sua variável de conexão. O teste de limites do deploy também passou. O fluxo real de navegador terminou sem exceções de JavaScript.
 
 Com Supabase local de desenvolvimento disponível, os checks SQL fazem rollback dos dados de teste:
 
@@ -201,13 +199,13 @@ docker exec -i supabase_db_tess-chat psql -U postgres -d postgres -v ON_ERROR_ST
 
 Os três checks foram executados contra PostgreSQL real. Cobrem propriedade, RLS, privilégios, quota, snapshots, expiração/revogação, idempotência, consumo desconhecido, recuperação e contabilização de múltiplas chamadas/resumos. A regressão de chat cobre liberação imediata de saldo, uso misto conhecido/desconhecido, consumo reportado acima da estimativa, encerramento antes do provedor e listagens de 1.001 conversas com isolamento de contas. O check de conectores também cobre state OAuth de uso único/expirado, escopos obrigatórios, isolamento de contas, leases de refresh e impossibilidade de um refresh/callback antigo restaurar uma conexão removida ou substituída.
 
-O smoke de conectores exercitou as rotas reais com autenticação e persistência reais, mas respostas HTTP Google de teste: PKCE, replay rejeitado, tokens criptografados, dois leitores concorrentes com um único refresh externo, pesquisa/leitura Drive e Gmail e desconexão mesmo com falha na revogação remota. Não é autorização real de uma conta Google. O MCP foi consultado e executado no servidor Context7 real; resultados estão em `artifacts/optional-verification.json`. Os testes do protocolo do modelo não substituem validar uma geração real com chave válida.
+O smoke de conectores exercitou as rotas reais com autenticação e persistência reais, mas respostas HTTP Google de teste: PKCE, replay rejeitado, tokens criptografados, dois leitores concorrentes com um único refresh externo, pesquisa/leitura Drive e Gmail e desconexão mesmo com falha na revogação remota. Não é autorização real de uma conta Google. O MCP foi consultado e executado no servidor Context7 real; Os testes do protocolo do modelo não substituem validar uma geração real com chave válida.
 
-Os extras também foram exercitados no navegador contra autenticação e dados locais reais: busca com acentos, clipboard permitido/negado, exportação sem upload, isolamento entre conversas durante carregamento e layout em 390/320 px. O teste de teclado usou somente uma indicação de prontidão no cliente; os dois envios chegaram à API real e receberam 503 por falta de chave, sem gerar respostas nem consumir créditos. Resultados em `artifacts/extras-verification.json`.
+Os extras também foram exercitados no navegador contra autenticação e dados locais reais: busca com acentos, clipboard permitido/negado, exportação sem upload, isolamento entre conversas durante carregamento e layout em 390/320 px. O teste de teclado usou somente uma indicação de prontidão no cliente; os dois envios chegaram à API real e receberam 503 por falta de chave, sem gerar respostas nem consumir créditos.
 
 A imagem atualizada do frontend também foi iniciada e validada com login, proxy autenticado ao backend, busca e clipboard. Nesta máquina, o acesso do bridge Docker ao gateway do host expirou; o smoke integrado usou rede host e bind em `127.0.0.1`, sem alterar o firewall. Isso é verificação local, não publicação cloud.
 
-A revisão visual foi verificada em desktop e em 390/320 px, preservando autenticação, anexos, MCP, exportação, consentimento e revogação. Evidências atuais: `artifacts/minimal-*.png` e `artifacts/minimal-verification.json`. O vídeo local existente mostra a aparência anterior; a gravação final será atualizada após a publicação.
+A revisão visual foi verificada em desktop e em 390/320 px, preservando autenticação, anexos, MCP, exportação, consentimento e revogação.
 
 As correções de retry e atualização foram exercitadas no frontend reconstruído: seleção preservada após 503 real, retry somente com anexo habilitado, instruções e salvamento bloqueados durante um GET real deliberadamente atrasado, e salvamento posterior confirmado pela API. O smoke alterou apenas a indicação de prontidão do cliente, sem configurar ou chamar o modelo; conta e arquivos de teste foram removidos.
 
