@@ -426,6 +426,7 @@ async def chat_response(
                     yield line({"type": "delta", "text": TRUNCATION_NOTICE})
                 elif calls:
                     group = list(items)
+                    prepared = []
                     for call in calls:
                         call_id = call["call_id"]
                         if call_id in seen_calls:
@@ -435,22 +436,31 @@ async def chat_response(
                         name, arguments = call["name"], call["arguments"]
                         yield line({"type": "status", "stage": "tool", "text": f"Consultando ferramenta {name}."})
                         yield line({"type": "tool", "id": call_id, "name": name, "status": "running"})
-                        tool_failed = False
+                        prepared.append((call, call_id, name, arguments))
+
+                    async def execute_tool(name, arguments):
+                        # Chamadas independentes rodam em paralelo; falha de ferramenta nunca derruba o turno.
                         try:
                             result = await run.wait(registry.execute(name, arguments))
                             encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-                            size = len(encoded.encode("utf-8"))
-                            if size > MAX_TOOL_RESULT_BYTES or run.tool_bytes + size > MAX_TOOL_BYTES:
+                            if len(encoded.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
                                 raise RuntimeError("Tool result size limit")
-                            run.tool_bytes += size
+                            return encoded, result, False
                         except (asyncio.CancelledError, Interrupted):
                             raise
                         except Exception:
                             # A falha da ferramenta não derruba o turno: o modelo recebe o erro e pode responder sem ela.
                             result = {"error": f"A ferramenta {name} falhou agora e pode funcionar se tentada novamente."}
                             encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-                            run.tool_bytes += len(encoded.encode("utf-8"))
+                            return encoded, result, True
+
+                    outcomes = await asyncio.gather(*(execute_tool(name, arguments) for _, _, name, arguments in prepared))
+                    for (call, call_id, name, _), (encoded, result, tool_failed) in zip(prepared, outcomes):
+                        if run.tool_bytes + len(encoded.encode("utf-8")) > MAX_TOOL_BYTES:
+                            result = {"error": f"O resultado da ferramenta {name} foi descartado por limite de tamanho acumulado."}
+                            encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
                             tool_failed = True
+                        run.tool_bytes += len(encoded.encode("utf-8"))
                         if isinstance(result, dict) and isinstance(result.get("error"), str):
                             tool_failed = True
                         yield line({
@@ -469,16 +479,42 @@ async def chat_response(
                     context.loop_groups.append(items)
                     continue
                 await run.check()
+                followups: list[str] = []
+                if not truncated and run.text:
+                    # Sugestões de follow-up: chamada auxiliar barata; falha nunca bloqueia o turno.
+                    try:
+                        followup_prompt = ("Proponha ate tres perguntas de acompanhamento curtas e objetivas em "
+                                           "portugues que o usuario provavelmente faria em seguida. Responda com uma "
+                                           "pergunta por linha, sem numeracao e sem travessao, cada uma com no maximo "
+                                           "80 caracteres.\n\nResposta do assistente:\n" + run.text[:4000])
+                        followup_count = await run.count([{"role": "user", "content": followup_prompt}], [])
+                        await run.reserve("reply", followup_count, 200)
+                        followup_response = await run.wait(provider.responses.create(
+                            model=db.config.model, input=[{"role": "user", "content": followup_prompt}],
+                            tools=[], max_output_tokens=200, store=False, stream=False, truncation="disabled",
+                        ))
+                        run.observe_usage(followup_response)
+                        candidates = (part.strip().lstrip("-•*0123456789. ") for part in response_text(followup_response).splitlines())
+                        followups = [line[:90] for line in candidates if len(line) >= 8][:3]
+                        await run.record("completed")
+                    except Exception:
+                        try:
+                            await run.record("failed", cleanup=True)
+                        except Exception:
+                            pass
                 await run.wait(settle(
                     db, user_id, run.run_id, "completed", run.text,
                     run.input_tokens, run.output_tokens, "output_truncated" if truncated else None,
                 ))
                 saved = True
-                yield line({
+                done: dict[str, object] = {
                     "type": "done", "run_id": run.run_id, "status": "completed",
                     "input_tokens": run.input_tokens, "output_tokens": run.output_tokens,
                     **({"truncated": True} if truncated else {}),
-                })
+                }
+                if followups:
+                    done["followups"] = followups
+                yield line(done)
                 return
         except (asyncio.CancelledError, GeneratorExit):
             status, run.error_code = "interrupted", "client_disconnected"

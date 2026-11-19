@@ -93,3 +93,11 @@ test("read failures retain partial deltas and cancel the reader", async () => {
   assert.equal(received.at(-1).text, "Parcial");
   assert.equal(body.locked, false);
 });
+
+test("done carries followup suggestions when present", async () => {
+  const withFollowups = { ...done, followups: ["Como funciona a compactacao?", "Quanto custa em tokens?"] };
+  const bytes = new TextEncoder().encode([start, withFollowups].map((event) => JSON.stringify(event)).join("\n") + "\n");
+  const received = [];
+  assert.deepEqual(await consumeStream(bytesStream(bytes), (event) => received.push(event)), withFollowups);
+  await assert.rejects(consumeStream(eventStream([start, { ...done, followups: [""] }]), () => {}), /desconhecido/);
+});

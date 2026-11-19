@@ -32,6 +32,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
   const [settingsReady, setSettingsReady] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState("");
   const [draft, setDraft] = useState("");
+  const [followups, setFollowups] = useState<string[]>([]);
   const [renameTitle, setRenameTitle] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -295,6 +296,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
             ];
             setHistory((current) => current ? { ...current, messages: [...current.messages, ...messages] } : current);
             setDraft("");
+            setFollowups([]);
             setPendingAttachments([]);
           }
           setStreamPhase("streaming");
@@ -311,7 +313,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
         } else {
           setProgress("");
           if (event.type === "error") setError(event.error);
-          else setStreamNotice(event.truncated ? "Resposta incompleta: limite de saída." : "");
+          else { setStreamNotice(event.truncated ? "Resposta incompleta: limite de saída." : ""); setFollowups(event.followups ?? []); }
           // Keep the assistant unconfirmed until the authoritative history is reloaded below.
           if (event.type === "error") setHistory((current) => current ? { ...current, messages: current.messages.map((message) => message.id === assistantId ? { ...message, status: event.status } : message) } : current);
         }
@@ -368,7 +370,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
             {visibleConversations.map((conversation) => <div className="conversation-row" key={conversation.id}>
               <button type="button" aria-current={selectedId === conversation.id ? "page" : undefined} disabled={busy || booting} onClick={() => {
                 if (actionLock.current || selectedId === conversation.id) return;
-                setHistory(null); setHistoryLoading(true); setSelectedId(conversation.id); setRenameTitle(null); setDraft(""); setPendingAttachments([]); setError(""); setStreamNotice(""); setProgress("");
+                setHistory(null); setHistoryLoading(true); setSelectedId(conversation.id); setRenameTitle(null); setDraft(""); setFollowups([]); setPendingAttachments([]); setError(""); setStreamNotice(""); setProgress("");
               }}><span className="conversation-title" title={conversation.title}>{conversation.title}</span></button>
               <button type="button" className="conversation-delete" aria-label={deleteArmed === conversation.id ? `Confirmar exclusão de ${conversation.title}` : `Excluir ${conversation.title}`} disabled={busy || booting} onClick={() => {
                 if (actionLock.current) return;
@@ -434,6 +436,7 @@ export function ChatWorkspace({ client, userId, email }: { client: SupabaseClien
         {running && !streamPhase && <p role="status" className="notice">Execução em andamento.</p>}
         {needsSync && !streamPhase && !running && <p role="status" className="notice">Sincronizando…</p>}
         <p role="status" aria-live="polite" className="stream-status">{streamPhase === "syncing" ? "Sincronizando…" : progress || (streamPhase === "sending" ? "Enviando…" : streamPhase === "streaming" ? "Respondendo…" : "")}</p>
+        {followups.length > 0 && !running && !busy && !streamPhase && <div className="followups" role="list" aria-label="Perguntas sugeridas">{followups.map((suggestion) => <button key={suggestion} type="button" className="chip" onClick={() => { setDraft(suggestion); composer.current?.focus(); }}>{suggestion}</button>)}</div>}
         <form className="composer" onSubmit={sendMessage}><label className="sr-only" htmlFor="message">Sua mensagem</label><textarea ref={composer} id="message" rows={3} maxLength={16000} placeholder="Mensagem" value={draft} disabled={busy || booting || needsSync || !selectedId || !history || historyLoading || running || !config?.chat_configured} onChange={(event) => setDraft(event.target.value)} aria-keyshortcuts="Control+Enter Meta+Enter" onKeyDown={(event) => {
           if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
             event.preventDefault();

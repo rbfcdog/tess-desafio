@@ -3,5 +3,11 @@
 !pyproject.toml
 !uv.lock
 !*.py
-test_*.py
-*_test.py
+!api
+!api/**
+!core
+!core/**
+!repositories
+!repositories/**
+!services
+!services/**

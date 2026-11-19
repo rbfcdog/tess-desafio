@@ -134,6 +134,9 @@ html[data-theme="dark"] .conversation-row > .conversation-delete:hover:not(:disa
 .status-dot { display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--muted); vertical-align: middle; }
 .execution.failed, .execution.interrupted { color: #9f2424; }
 .composer-area { flex: none; border-top: 1px solid var(--line); padding: 12px 24px; background: var(--paper); }
+.followups { max-width: 792px; margin: 0 auto 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { max-width: 100%; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--fg, inherit); font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
 .composer-area > .notice { max-width: 792px; margin: 0 auto 8px; }
 .stream-status { max-width: 792px; margin: 0 auto 6px; color: var(--muted); font-size: 12px; }
 .stream-status:empty { display: none; }

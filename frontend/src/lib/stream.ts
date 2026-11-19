@@ -4,7 +4,7 @@ export type StreamEvent =
   | { type: "status"; stage: "compacting" | "thinking" | "tool"; text: string }
   | { type: "tool"; id: string; name: string; status: "running" | "completed" | "failed"; arguments?: Record<string, unknown>; result?: unknown; error?: string }
   | { type: "compaction"; summary_id: string; through_message_id?: string | null }
-  | { type: "done"; run_id: string; status: "completed"; input_tokens: number; output_tokens: number; truncated?: boolean }
+  | { type: "done"; run_id: string; status: "completed"; input_tokens: number; output_tokens: number; truncated?: boolean; followups?: string[] }
   | { type: "error"; run_id: string; status: "failed" | "interrupted"; error: string };
 
 type TerminalEvent = Extract<StreamEvent, { type: "done" | "error" }>;
@@ -24,7 +24,7 @@ function parseEvent(line: string): StreamEvent {
     (event.type === "status" && ["compacting", "thinking", "tool"].includes(String(event.stage)) && text("text")) ||
     (event.type === "tool" && text("id") && text("name") && ["running", "completed", "failed"].includes(String(event.status)) && (event.arguments === undefined || (event.arguments !== null && typeof event.arguments === "object" && !Array.isArray(event.arguments))) && (event.error === undefined || typeof event.error === "string")) ||
     (event.type === "compaction" && text("summary_id") && (event.through_message_id === undefined || event.through_message_id === null || text("through_message_id"))) ||
-    (event.type === "done" && text("run_id") && event.status === "completed" && tokens("input_tokens") && tokens("output_tokens") && (event.truncated === undefined || typeof event.truncated === "boolean")) ||
+    (event.type === "done" && text("run_id") && event.status === "completed" && tokens("input_tokens") && tokens("output_tokens") && (event.truncated === undefined || typeof event.truncated === "boolean") && (event.followups === undefined || (Array.isArray(event.followups) && event.followups.every((item) => typeof item === "string" && item.length > 0)))) ||
     (event.type === "error" && text("run_id") && ["failed", "interrupted"].includes(String(event.status)) && text("error"))
   ) return event as StreamEvent;
   throw new Error("A API enviou um evento de transmissão desconhecido ou incompleto.");

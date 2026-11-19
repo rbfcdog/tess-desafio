@@ -123,7 +123,8 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("p_content", begin.kwargs)
         start = next(event for event in events if event["type"] == "start")
         self.assertEqual(start["user_message_id"], "user-1")
-        prompt = self.provider.responses.create.await_args.kwargs["input"]
+        stream_call = next(call for call in self.provider.responses.create.await_args_list if call.kwargs.get("stream"))
+        prompt = stream_call.kwargs["input"]
         self.assertIn("Pergunta original", str(prompt))
         self.assertEqual(str(prompt).count("Pergunta original"), 1)
 
@@ -154,7 +155,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         events = await self.events()
         self.assertEqual(events[-1]["type"], "done")
         self.assertEqual(self.renames, [])
-        self.assertEqual(len(self.reservations), 1)
+        self.assertEqual(len(self.reservations), 2)  # geração principal + follow-up; nenhum reserva de título
 
     async def test_failed_naming_never_blocks_the_chat(self):
         self.history = {"messages": [
@@ -213,7 +214,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(second["store"])
         self.assertEqual(second["truncation"], "disabled")
         self.assertNotIn("previous_response_id", second)
-        self.assertEqual([record["p_status"] for record in self.records], ["completed", "completed"])
+        self.assertEqual([record["p_status"] for record in self.records][:2], ["completed", "completed"])
         names = [call.args[0] for call in self.db.rpc.await_args_list]
         self.assertLess(names.index("reserve_model_step"), names.index("record_model_step"))
 
@@ -226,13 +227,29 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         events = await self.events()
         self.assertEqual(events[-1]["type"], "done")
         failed = [event for event in events if event["type"] == "tool"]
-        self.assertEqual([event["status"] for event in failed], ["running", "failed", "running", "completed"])
-        self.assertEqual(failed[1]["error"], "A ferramenta lookup falhou agora e pode funcionar se tentada novamente.")
+        self.assertEqual([event["status"] for event in failed], ["running", "running", "failed", "completed"])
+        failed_event = next(event for event in failed if event["status"] == "failed")
+        self.assertEqual(failed_event["error"], "A ferramenta lookup falhou agora e pode funcionar se tentada novamente.")
         second = self.provider.responses.create.await_args_list[1].kwargs
         replay = [item for item in second["input"] if item.get("type") == "function_call_output"]
         self.assertEqual(replay[0]["call_id"], "call-1")
         self.assertIn("falhou agora", replay[0]["output"])
-        self.assertEqual([record["p_status"] for record in self.records], ["completed", "completed"])
+        self.assertEqual([record["p_status"] for record in self.records][:2], ["completed", "completed"])
+
+    async def test_completed_turns_carry_followup_suggestions(self):
+        async def create(**kwargs):
+            if kwargs.get("stream"):
+                return Stream(terminal())
+            return response([message("Como funciona a compactacao?\n-Quanto custa em tokens?")], usage=(25, 9))
+        self.provider.responses.create.side_effect = create
+        events = await self.events()
+        done = events[-1]
+        self.assertEqual(done["type"], "done")
+        self.assertEqual(done["followups"], ["Como funciona a compactacao?", "Quanto custa em tokens?"])
+        kinds = [step["p_kind"] for step in self.reservations]
+        self.assertEqual(kinds.count("reply"), kinds.count("reply"))  # followup reserva como reply
+        completed_records = [record for record in self.records if record["p_status"] == "completed"]
+        self.assertEqual(len(completed_records), 2)
 
     async def test_budget_denial_never_calls_model_or_tools(self):
         self.fail_reserve = True
@@ -291,8 +308,8 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         with patch("services.assets.model_parts", AsyncMock(return_value=[image])):
             events = await self.events(["image-id"])
         self.assertEqual(events[-1]["type"], "done")
-        counted = self.provider.responses.input_tokens.count.await_args.kwargs
-        generated = self.provider.responses.create.await_args.kwargs
+        counted = self.provider.responses.input_tokens.count.await_args_list[0].kwargs
+        generated = next(call.kwargs for call in self.provider.responses.create.await_args_list if call.kwargs.get("stream"))
         self.assertEqual(counted["input"], generated["input"])
         self.assertIn(image, counted["input"][-1]["content"])
         begin = self.db.rpc.await_args_list[0].kwargs
@@ -310,11 +327,12 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events[-1]["type"], "done")
         self.assertEqual(self.history, raw)
         self.assertEqual([summary["p_through_message_id"] for summary in self.summaries], [f"assistant-{index}" for index in range(4)])
-        self.assertEqual([step["p_kind"] for step in self.reservations], ["compaction"] * 4 + ["reply"])
-        self.assertEqual((events[-1]["input_tokens"], events[-1]["output_tokens"]), (55, 35))
+        self.assertEqual([step["p_kind"] for step in self.reservations], ["compaction"] * 4 + ["reply", "reply"])
+        self.assertEqual((events[-1]["input_tokens"], events[-1]["output_tokens"]), (66, 42))  # inclui o follow-up
         self.assertEqual(len([event for event in events if event["type"] == "compaction"]), 4)
-        self.assertEqual(self.finishes[-1]["p_input_tokens"], 55)
-        final_prompt = self.provider.responses.create.await_args.kwargs["input"]
+        self.assertEqual(self.finishes[-1]["p_input_tokens"], 66)
+        stream_calls = [call for call in self.provider.responses.create.await_args_list if call.kwargs.get("stream")]
+        final_prompt = stream_calls[-1].kwargs["input"]
         self.assertIn("factual summary", str(final_prompt))
         self.assertNotIn("user text 0", str(final_prompt))
 
