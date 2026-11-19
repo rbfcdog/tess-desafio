@@ -106,7 +106,7 @@ Configure Site URL/redirects de autenticação para a origem utilizada; no ambie
 | `MAX_MODEL_STEPS` / `MAX_TOOL_CALLS` | Padrão `8` para cada limite por execução |
 | `ENCRYPTION_KEY` | Chave Fernet estável para credenciais de ferramentas e Google |
 | `PUBLIC_APP_URL` | Origem pública do frontend; local preparado em `http://localhost:3005` |
-| `MCP_TRUSTED_HOSTS` | Hosts públicos exatos, separados por vírgula; exemplo `mcp.context7.com,learn.microsoft.com,mcp.exa.ai` |
+| `MCP_TRUSTED_HOSTS` | Hosts públicos exatos, separados por vírgula; em produção: `mcp.context7.com,learn.microsoft.com,mcp.exa.ai,api.githubcopilot.com,mcp.deepwiki.com` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Cliente OAuth Google, se usar o conector |
 | `GOOGLE_REDIRECT_URI` | Retorno exato em `<PUBLIC_APP_URL>/api/connectors/google/callback` |
 | `PORT` | Padrão `3001` |
