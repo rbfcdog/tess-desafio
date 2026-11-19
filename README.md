@@ -7,7 +7,7 @@ Chat com frontend Next.js/TypeScript e backend Python/FastAPI independentes. Sem
 | Área | Implementação | Verificação realizada |
 |---|---|---|
 | Usuários, múltiplas conversas, histórico e configurações | Persistência, isolamento por usuário, streaming, título por IA, exclusão e estados de execução | Supabase real, API e navegador, local e em produção |
-| Ferramentas e internet | Busca nativa OpenAI, leitura de páginas HTTPS, cadastro de ferramentas HTTP GET e MCP remotos | Geração real em produção: busca nativa com fontes citadas, scraping e MCP (Context7, Microsoft Learn, Exa) |
+| Ferramentas e internet | Busca nativa OpenAI, leitura de páginas HTTPS, cadastro de ferramentas HTTP GET e MCP remotos; nativas próprias Wikipedia, câmbio (ECB) e clima (Open-Meteo) | Geração real em produção: busca nativa com fontes citadas, scraping, MCP (Context7, Microsoft Learn, Exa) e clima/câmbio reais na mesma resposta |
 | Imagens e PDFs | Upload privado, normalização, prévia/download e entradas multimodais nativas | Geração real em produção: imagem descrita corretamente e PDF lido com extração e cálculo |
 | Compartilhamento | Snapshot público somente leitura, arquivos delimitados, expiração e revogação | Leitura anônima, expiração e revogação (404) verificadas no endereço público |
 | Compactação automática | Resumos persistidos, histórico original preservado, consumo contabilizado | Geração real em produção: 4 turnos acumulados, evento de compactação aos 16.675 tokens, resumo persistido e histórico intacto |
