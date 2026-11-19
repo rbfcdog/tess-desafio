@@ -133,7 +133,7 @@ class ToolBoundaries(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_arguments_are_audited_without_network_execution(self):
         db = SimpleNamespace(rpc=AsyncMock(return_value={"id": "execution"}))
         registry = tools.ToolRegistry(db, "owner", "conversation", "run")
-        registry.add("read_webpage", "read", tools.PAGE_SCHEMA, {}, "page")
+        registry.add("read_webpage", "read", tools.PAGE_SCHEMA, {}, "builtin", "read_webpage")
         with patch.object(tools, "read_webpage", AsyncMock()) as external:
             result = await registry.execute("read_webpage", '{"url": 7}')
         external.assert_not_awaited()
@@ -157,7 +157,7 @@ class ToolBoundaries(unittest.IsolatedAsyncioTestCase):
     async def test_cancellation_closes_execution_before_propagating(self):
         db = SimpleNamespace(rpc=AsyncMock(return_value={"id": "execution"}))
         registry = tools.ToolRegistry(db, "owner", "conversation", "run")
-        registry.add("read_webpage", "read", tools.PAGE_SCHEMA, {}, "page")
+        registry.add("read_webpage", "read", tools.PAGE_SCHEMA, {}, "builtin", "read_webpage")
         started = asyncio.Event()
         async def waiting(url):
             started.set()
@@ -183,3 +183,52 @@ class ToolBoundaries(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NativeToolHandlers(unittest.IsolatedAsyncioTestCase):
+    async def test_wikipedia_lookup_strips_markup_and_limits_results(self):
+        api = json.dumps({"query": {"search": [
+            {"title": "Protocolo MCP", "snippet": "<span class=\"searchmatch\">MCP</span> conecta modelos a ferramentas."},
+            {"title": "Segundo", "snippet": "texto"},
+            {"title": "Terceiro", "snippet": "texto"},
+            {"title": "Quarto", "snippet": "fora do limite"},
+        ]}}).encode()
+
+        async def fake_request(method, url, **kwargs):
+            assert url == "https://pt.wikipedia.org/w/api.php"
+            return api, "application/json", url
+        with patch.object(tools, "request_bytes", fake_request):
+            result = await tools.wikipedia_lookup("MCP")
+        self.assertEqual(len(result["results"]), 3)
+        self.assertEqual(result["results"][0]["snippet"], "MCP conecta modelos a ferramentas.")
+        self.assertTrue(result["untrusted"])
+
+    async def test_fx_rate_normalizes_currencies(self):
+        api = json.dumps({"base": "USD", "date": "2026-11-18", "rates": {"BRL": 5.4}}).encode()
+        seen = {}
+
+        async def fake_request(method, url, **kwargs):
+            seen.update(kwargs.get("params") or {})
+            return api, "application/json", url
+        with patch.object(tools, "request_bytes", fake_request):
+            result = await tools.fx_rate("usd", "brl")
+        self.assertEqual(seen, {"base": "USD", "symbols": "BRL"})
+        self.assertEqual(result["rates"]["BRL"], 5.4)
+
+    async def test_weather_reports_unknown_place_without_raising(self):
+        async def fake_request(method, url, **kwargs):
+            return json.dumps({"results": []}).encode(), "application/json", url
+        with patch.object(tools, "request_bytes", fake_request):
+            result = await tools.weather_forecast("Narnia")
+        self.assertFalse(result["found"])
+
+    async def test_weather_returns_daily_forecast_for_known_place(self):
+        geo = json.dumps({"results": [{"name": "São Paulo", "country": "Brasil", "latitude": -23.5, "longitude": -46.6}]}).encode()
+        forecast = json.dumps({"daily": {"time": ["2026-11-18"], "temperature_2m_max": [28.1]}}).encode()
+
+        async def fake_request(method, url, **kwargs):
+            return geo if "geocoding" in url else forecast, "application/json", url
+        with patch.object(tools, "request_bytes", fake_request):
+            result = await tools.weather_forecast("São Paulo")
+        self.assertEqual(result["place"], "São Paulo")
+        self.assertEqual(result["daily"]["temperature_2m_max"], [28.1])
