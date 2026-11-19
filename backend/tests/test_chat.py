@@ -207,7 +207,9 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.registry.record_native.assert_awaited_once_with(calls[1])
         second = self.provider.responses.create.await_args_list[1].kwargs
         replay = second["input"]
-        self.assertEqual(replay[1:5], calls)
+        # replay[1] é o re-anchor de instruções (posição fixa, estável entre passos).
+        self.assertIn("Diretrizes", str(replay[1]))
+        self.assertEqual(replay[2:6], calls)
         self.assertEqual([item["call_id"] for item in replay if item.get("type") == "function_call_output"], ["call-1", "call-2"])
         self.assertEqual(second["max_tool_calls"], 5)
         self.assertEqual(second["max_output_tokens"], 2041)
