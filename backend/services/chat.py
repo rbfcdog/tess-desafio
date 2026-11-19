@@ -257,47 +257,63 @@ class Run:
             yield {"type": "compaction", "summary_id": saved["id"], "through_message_id": through}
 
     async def reply(self, prompt: list[dict[str, Any]], tools: list[dict[str, Any]], output_cap: int) -> AsyncIterator[dict[str, Any]]:
-        count = await self.count(prompt, tools)
-        await self.reserve("reply", count, output_cap)
-        self.stream = await self.wait(self.provider.responses.create(
-            model=self.db.config.model, input=prompt, tools=tools, max_output_tokens=output_cap,
-            max_tool_calls=max(1, self.max_tools - self.tool_calls),
-            store=False, stream=True, truncation="disabled", include=["reasoning.encrypted_content"],
-        ))
-        iterator = self.stream.__aiter__()
-        try:
-            while True:
+        # Uma etapa que falha antes de qualquer delta chegar ao usuário ganha uma segunda
+        # tentativa (429/503/rede/stream interrompido); com texto já visível, falha como antes.
+        emitted_before = len(self.text)
+        for attempt in range(2):
+            count = await self.count(prompt, tools)
+            await self.reserve("reply", count, output_cap)
+            try:
+                self.stream = await self.wait(self.provider.responses.create(
+                    model=self.db.config.model, input=prompt, tools=tools, max_output_tokens=output_cap,
+                    max_tool_calls=max(1, self.max_tools - self.tool_calls),
+                    store=False, stream=True, truncation="disabled", include=["reasoning.encrypted_content"],
+                ))
+                iterator = self.stream.__aiter__()
+                while True:
+                    try:
+                        event = await self.wait(anext(iterator))
+                    except StopAsyncIteration:
+                        self.error_code = "provider_stream_ended"
+                        raise RuntimeError("Missing terminal event") from None
+                    event_type = value(event, "type")
+                    if event_type in {"response.output_text.delta", "response.refusal.delta"}:
+                        delta = value(event, "delta", "")
+                        self.append_text(delta)
+                        yield {"type": "delta", "text": delta}
+                    elif event_type in {"response.completed", "response.incomplete", "response.failed"}:
+                        response = value(event, "response")
+                        self.observe_usage(response)
+                        truncated = event_type == "response.incomplete" and value(value(response, "incomplete_details"), "reason") == "max_output_tokens"
+                        if (event_type != "response.completed" and not truncated) or self.active_usage is None:
+                            self.error_code = "provider_usage_missing" if self.active_usage is None else "provider_response_failed"
+                            await self.record("failed")
+                            raise RuntimeError("Provider response not complete")
+                        self.reply_tokens += self.active_usage[1]
+                        await self.record("completed")
+                        yield {"type": "terminal", "response": response, "truncated": truncated}
+                        return
+                    elif event_type in {"error", "response.error"}:
+                        raise RuntimeError("Provider stream error")
+            except (asyncio.CancelledError, Interrupted):
+                raise
+            except Exception:
+                if len(self.text) > emitted_before or attempt == 1:
+                    raise
+                # A reserva da tentativa falha volta ao balde antes da segunda tentativa.
                 try:
-                    event = await self.wait(anext(iterator))
-                except StopAsyncIteration:
-                    self.error_code = "provider_stream_ended"
-                    raise RuntimeError("Missing terminal event") from None
-                event_type = value(event, "type")
-                if event_type in {"response.output_text.delta", "response.refusal.delta"}:
-                    delta = value(event, "delta", "")
-                    self.append_text(delta)
-                    yield {"type": "delta", "text": delta}
-                elif event_type in {"response.completed", "response.incomplete", "response.failed"}:
-                    response = value(event, "response")
-                    self.observe_usage(response)
-                    truncated = event_type == "response.incomplete" and value(value(response, "incomplete_details"), "reason") == "max_output_tokens"
-                    if (event_type != "response.completed" and not truncated) or self.active_usage is None:
-                        self.error_code = "provider_usage_missing" if self.active_usage is None else "provider_response_failed"
-                        await self.record("failed")
-                        raise RuntimeError("Provider response not complete")
-                    self.reply_tokens += self.active_usage[1]
-                    await self.record("completed")
-                    yield {"type": "terminal", "response": response, "truncated": truncated}
-                    return
-                elif event_type in {"error", "response.error"}:
-                    raise RuntimeError("Provider stream error")
-        finally:
-            with anyio.move_on_after(4, shield=True):
-                try:
-                    await self.stream.close()
+                    await self.record("failed", cleanup=True)
                 except Exception:
                     pass
-            self.stream = None
+                self.error_code = None
+                await asyncio.sleep(1.2)
+            finally:
+                with anyio.move_on_after(4, shield=True):
+                    try:
+                        await self.stream.close()
+                    except Exception:
+                        pass
+                self.stream = None
 
 
 async def chat_response(

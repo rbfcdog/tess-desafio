@@ -251,6 +251,24 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         completed_records = [record for record in self.records if record["p_status"] == "completed"]
         self.assertEqual(len(completed_records), 2)
 
+    async def test_transient_provider_failure_retries_before_any_delta(self):
+        calls = {"n": 0}
+        async def create(**kwargs):
+            if not kwargs.get("stream"):
+                return Stream(terminal())  # follow-up falha calado neste teste
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("503 upstream hiccup")
+            return Stream(terminal(response([message("funcionou agora")])))
+        self.provider.responses.create.side_effect = create
+        events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(calls["n"], 2)
+        self.assertEqual(self.records[0]["p_status"], "failed")  # tentativa falha é registrada e a reserva volta
+        self.assertEqual(self.records[1]["p_status"], "completed")
+        deltas = "".join(event.get("text", "") for event in events if event["type"] == "delta")
+        self.assertIn("funcionou agora", deltas)
+
     async def test_budget_denial_never_calls_model_or_tools(self):
         self.fail_reserve = True
         events = await self.events()
@@ -271,11 +289,14 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.registry.execute.await_count, 1)
 
     async def test_failed_terminal_retains_known_usage_without_success(self):
-        self.provider.responses.create.return_value = Stream(terminal(response(usage=(5000, 9), status="failed"), "response.failed"))
+        async def create(**kwargs):
+            return Stream(terminal(response(usage=(5000, 9), status="failed"), "response.failed"))
+        self.provider.responses.create.side_effect = create
         events = await self.events()
         self.assertEqual(events[-1]["type"], "error")
         self.assertEqual(self.finishes[-1]["p_status"], "failed")
-        self.assertEqual(self.finishes[-1]["p_input_tokens"], 5000)
+        # As duas tentativas falhas foram consumidas pelo provedor e sao faturadas juntas.
+        self.assertEqual(self.finishes[-1]["p_input_tokens"], 10000)
         self.assertEqual(self.records[-1]["p_input_tokens"], 5000)
 
     async def test_missing_usage_is_not_saved_as_completed(self):
@@ -412,7 +433,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"CONTEXT_INPUT_TOKENS": "50"}):
             events = await self.events()
         self.assertEqual(events[-1]["type"], "error")
-        self.assertEqual([record["p_status"] for record in self.records], ["completed", "failed"])
+        self.assertEqual([record["p_status"] for record in self.records], ["completed", "failed", "failed"])
         self.assertEqual(self.records[0]["p_input_tokens"], 300)
         self.assertIsNone(self.finishes[-1]["p_input_tokens"])
         self.assertEqual(len(self.summaries), 1)
