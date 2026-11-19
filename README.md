@@ -239,11 +239,3 @@ python deploy/railway.py frontend
 Os segredos são enviados à CLI por stdin, sem imprimi-los. Se o launcher npm não iniciar, repare sua instalação nativa; não trate saída vazia como autenticação bem-sucedida. O runner não cria projetos nem confirma disponibilidade apenas porque o upload terminou.
 
 Depois do deploy, confirme `/api/health` e teste, pelo endereço público, uma resposta real, vision/PDF, ferramentas, compactação, consumo, compartilhamento e OAuth configurado. Atualize o vídeo com esses fluxos reais antes da entrega final ao avaliador. Combine o período de avaliação e programe a desativação conforme o limite de uma semana do enunciado.
-
-### Pendências do responsável
-
-1. Fornecer `OPENAI_API_KEY` válida com billing para verificar os fluxos do modelo.
-2. Autorizar os serviços cloud e disponibilizar o Supabase de produção; então publicar e verificar o link público.
-3. Para o diferencial Google, fornecer o cliente OAuth e autorizar o redirect/usuários de teste.
-
-Não envie essas credenciais no chat público nem as versione. Configure-as nos ambientes privados dos serviços.
