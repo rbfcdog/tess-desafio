@@ -271,6 +271,38 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         deltas = "".join(event.get("text", "") for event in events if event["type"] == "delta")
         self.assertIn("funcionou agora", deltas)
 
+    async def test_compaction_failure_degrades_and_the_turn_continues(self):
+        self.history = history_with_turns(4)
+        async def create(**kwargs):
+            if kwargs.get("stream"):
+                return Stream(terminal())
+            raise RuntimeError("compaction provider down")
+        self.provider.responses.create.side_effect = create
+        with patch.dict("os.environ", {"CONTEXT_INPUT_TOKENS": "50"}):
+            events = await self.events()
+        skipped = [call for call in self.db.audit.await_args_list if call.args and call.args[1] == "compaction.skipped"]
+        self.assertTrue(skipped)
+        self.assertNotIn("compaction_failed", str(self.finishes))
+        self.assertGreaterEqual(len(self.reservations), 3)
+
+    async def test_compaction_retry_succeeds_after_transient_failure(self):
+        self.history = history_with_turns(4)
+        attempts = {"n": 0}
+        async def create(**kwargs):
+            if not kwargs.get("stream"):
+                attempts["n"] += 1
+                if attempts["n"] == 1:
+                    raise RuntimeError("503 hiccup")
+                return response([message("factual summary")])
+            return Stream(terminal())
+        self.provider.responses.create.side_effect = create
+        with patch.dict("os.environ", {"CONTEXT_INPUT_TOKENS": "50"}):
+            events = await self.events()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual([summary["p_through_message_id"] for summary in self.summaries][:1], ["assistant-0"])
+        retried = [call for call in self.provider.responses.create.await_args_list if not call.kwargs.get("stream")]
+        self.assertGreaterEqual(len(retried), 3)
+
     async def test_budget_denial_never_calls_model_or_tools(self):
         self.fail_reserve = True
         events = await self.events()

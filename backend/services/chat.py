@@ -174,19 +174,33 @@ class Run:
         self.text += delta
 
     async def summarize(self, prompt: list[dict[str, Any]], count: int) -> str:
-        await self.reserve("compaction", count, self.summary_cap)
-        response = await self.wait(self.provider.responses.create(
-            model=self.db.config.model, input=prompt, tools=[], max_output_tokens=self.summary_cap,
-            store=False, stream=False, truncation="disabled",
-        ))
-        self.observe_usage(response)
-        summary = response_text(response)
-        if value(response, "status") != "completed" or not self.active_usage or not summary.strip() or len(summary.encode("utf-8")) > 65536:
-            self.error_code = "compaction_failed"
-            await self.record("failed")
-            raise RuntimeError("Incomplete summary")
-        await self.record("completed")
-        return summary
+        # Falha transiente do provedor na compactação ganha uma segunda tentativa; a reserva
+        # da tentativa falha volta ao balde antes da próxima.
+        for attempt in range(2):
+            await self.reserve("compaction", count, self.summary_cap)
+            try:
+                response = await self.wait(self.provider.responses.create(
+                    model=self.db.config.model, input=prompt, tools=[], max_output_tokens=self.summary_cap,
+                    store=False, stream=False, truncation="disabled",
+                ))
+                self.observe_usage(response)
+                summary = response_text(response)
+                if value(response, "status") != "completed" or not self.active_usage or not summary.strip() or len(summary.encode("utf-8")) > 65536:
+                    self.error_code = "compaction_failed"
+                    raise RuntimeError("Incomplete summary")
+                await self.record("completed")
+                return summary
+            except (asyncio.CancelledError, Interrupted):
+                raise
+            except Exception:
+                try:
+                    await self.record("failed", cleanup=True)
+                except Exception:
+                    pass
+                if attempt == 1:
+                    raise
+                self.error_code = None
+                await asyncio.sleep(1.2)
 
     async def compact(self, context: Context, tools: list[dict[str, Any]], output_cap: int) -> AsyncIterator[dict[str, Any]]:
         while True:
@@ -407,8 +421,15 @@ async def chat_response(
                     run.error_code = "output_limit"
                     raise RuntimeError("Output limit reached")
                 tools = registry.definitions if run.tool_calls < run.max_tools else []
-                async for event in run.compact(context, tools, output_cap):
-                    yield line(event)
+                try:
+                    async for event in run.compact(context, tools, output_cap):
+                        yield line(event)
+                except HTTPException:
+                    raise
+                except Exception:
+                    # A compactação é otimização: se falhar após o retry, o loop segue com o
+                    # contexto cheio; a guarda de janela real (413) protege o limite duro.
+                    await db.audit(user_id, "compaction.skipped", conversation_id=conversation_id)
                 yield line({"type": "status", "stage": "thinking", "text": "Preparando resposta."})
                 prompt = await run.wait(context.prompt(db, user_id, conversation_id))
                 response = None
